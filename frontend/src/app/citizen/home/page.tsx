@@ -1,210 +1,160 @@
-import React from 'react';
-import { Footer } from '../../../../components/footer';
+'use client';
+import React, { useEffect, useRef } from 'react';
 import { Sidebar } from '../../../../components/sidebar';
+import gsap from 'gsap';
 
 export default function CitizenHome() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const chatBubbleRef = useRef<HTMLDivElement>(null);
+  const inputBarRef = useRef<HTMLDivElement>(null);
+  const iconsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      // Timeline for a staggered entrance
+      const tl = gsap.timeline();
+
+      tl.from(iconsRef.current, {
+        opacity: 0,
+        y: -15,
+        duration: 0.6,
+        ease: 'power3.out'
+      })
+      .from(headerRef.current, {
+        opacity: 0,
+        y: 20,
+        duration: 0.8,
+        ease: 'power3.out'
+      }, "-=0.4")
+      .from(chatBubbleRef.current, {
+        opacity: 0,
+        y: 20,
+        scale: 0.98,
+        duration: 0.8,
+        ease: 'power3.out'
+      }, "-=0.6")
+      .from(inputBarRef.current, {
+        opacity: 0,
+        y: 30,
+        duration: 0.8,
+        ease: 'power3.out'
+      }, "-=0.6");
+      
+    }, containerRef);
+    
+    return () => ctx.revert();
+  }, []);
+
   return (
-    <div className="flex min-h-screen bg-gray-50 dark:bg-[#0f1e3f]">
-      <div className="md:sticky md:top-0 md:h-screen shrink-0 z-50">
+    <div className="flex h-screen bg-gray-50 dark:bg-[#0f1e3f] overflow-hidden" ref={containerRef}>
+      {/* Sidebar - Made full height, no padding around it, sticky layout */}
+      <div className="shrink-0 h-screen z-50 md:sticky md:top-0 shadow-[4px_0_24px_rgba(0,0,0,0.05)] dark:shadow-none bg-white dark:bg-[#0a152e]">
         <Sidebar />
       </div>
 
-      <div className="flex-1 max-w-[1400px] mx-auto p-6 md:p-8 text-gray-900 dark:text-white">
-        {/* Page Header */}
-        <div className="mb-6">
-        <h1 className="text-xl font-medium tracking-wide text-[#997953] dark:text-[#cdaa80] mb-1">
-          NyayaAI Legal Assistant
-        </h1>
-        <p className="text-gray-600 dark:text-white/60 text-sm">
-          Describe your legal situation and receive AI-powered legal guidance instantly.
-        </p>
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col relative h-full w-full">
+        {/* Top Right Icons */}
+        <div ref={iconsRef} className="absolute top-6 right-6 md:top-8 md:right-8 flex items-center gap-4 z-10 cursor-pointer">
+          <button className="flex items-center justify-center w-11 h-11 md:w-12 md:h-12 rounded-full border border-gray-300 dark:border-white/5 dark:bg-[#213a56]/20 bg-white text-gray-700 dark:text-[#cdaa80] hover:bg-gray-100 dark:hover:bg-[#213a56]/60 transition-all duration-300 hover:scale-105 active:scale-95 shadow-sm">
+            <svg className="w-5 h-5 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+               {/* User plus icon */}
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+            </svg>
+          </button>
+          <button className="flex items-center justify-center w-11 h-11 md:w-12 md:h-12 rounded-full border border-gray-300 dark:border-white/5 dark:bg-[#213a56]/20 bg-white text-gray-700 dark:text-[#cdaa80] hover:bg-gray-100 dark:hover:bg-[#213a56]/60 transition-all duration-300 hover:scale-105 active:scale-95 shadow-sm">
+            <svg className="w-5 h-5 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+               {/* Bell icon */}
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Scrollable Chat Area */}
+        <div className="flex-1 overflow-y-auto px-6 pt-24 pb-40 custom-scrollbar">
+          <div className="max-w-4xl mx-auto flex flex-col gap-8 md:px-6">
+            
+            {/* Header */}
+            <div ref={headerRef} className="text-left cursor-default">
+              <h1 className="text-[26px] md:text-[28px] lg:text-[32px] font-medium tracking-wide text-[#997953] dark:text-[#cdaa80] mb-2 font-serif transition-colors duration-500 hover:text-[#7a6042] dark:hover:text-[#e0c3a0]">
+                NyayaAI Legal Assistant
+              </h1>
+              <p className="text-gray-600 dark:text-white/60 text-[15px] font-sans user-select-none hover:text-gray-800 dark:hover:text-white/80 transition-colors duration-300">
+                Describe your legal situation and receive AI-powered legal guidance instantly.
+              </p>
+            </div>
+
+            {/* Chat Bubble Layout */}
+            <div ref={chatBubbleRef} className="bg-white dark:bg-[#213a56]/40 rounded-xl rounded-tl-sm border border-gray-200 dark:border-transparent p-6 shadow-sm dark:shadow-xl dark:shadow-[#000000]/20 hover:border-[#997953]/30 dark:hover:bg-[#213a56]/60 transition-all duration-300 cursor-pointer group mt-2 backdrop-blur-sm">
+              <h2 className="text-[14px] font-medium text-[#997953] dark:text-[#cdaa80] flex items-center gap-2 mb-2 group-hover:text-[#7a6042] dark:group-hover:text-[#e0c3a0] transition-colors">
+                Namaste! <span role="img" aria-label="waving hand" className="group-hover:scale-110 transition-transform origin-bottom inline-block">👋</span> I&apos;m NyayaAI.
+              </h2>
+              <p className="text-gray-700 dark:text-white/85 text-[15px] leading-relaxed font-sans">
+                Describe your legal situation, and will analyze the applicable laws and suggest next steps. You can also upload documents or evidence!
+              </p>
+            </div>
+
+          </div>
+        </div>
+
+        {/* Fixed Input Area at Bottom */}
+        <div ref={inputBarRef} className="absolute bottom-0 left-0 right-0 p-6 md:p-10 bg-gradient-to-t from-gray-50 via-gray-50 to-transparent dark:from-[#0f1e3f] dark:via-[#0f1e3f] dark:to-transparent z-20">
+          <div className="max-w-4xl mx-auto md:px-6">
+            <div className="flex items-center gap-4 w-full group relative">
+              
+              {/* Plus Button */}
+              <button 
+                type="button"
+                className="flex items-center justify-center w-12 h-12 md:w-14 md:h-14 rounded-full border border-gray-300 dark:border-white/10 dark:bg-transparent bg-white text-gray-500 dark:text-white/60 hover:bg-gray-100 dark:hover:bg-white/5 active:bg-gray-200 hover:scale-105 active:scale-95 transition-all duration-300 shrink-0 cursor-pointer shadow-sm z-10 outline-none focus:ring-2 focus:ring-[#997953]/50 dark:focus:ring-white/20"
+                aria-label="Add attachment"
+              >
+                <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+              
+              {/* Input Field */}
+              <div className="flex-1 relative cursor-text transition-transform duration-300">
+                <input 
+                  type="text" 
+                  placeholder="Describe your legal situation..." 
+                  className="w-full bg-white dark:bg-transparent border border-gray-300 dark:border-[#cdaa80]/30 rounded-full px-6 py-4 md:py-[18px] text-[15px] outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-white/40 focus:border-[#997953] dark:focus:border-[#cdaa80] focus:ring-1 focus:ring-[#997953] dark:focus:ring-[#cdaa80] transition-all duration-300 shadow-[0_4px_20px_rgba(0,0,0,0.02)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)] hover:border-gray-400 dark:hover:border-[#cdaa80]/60 hover:bg-white/50 dark:hover:bg-[#213a56]/20 focus:bg-white dark:focus:bg-[#1a2c47]/50"
+                />
+              </div>
+              
+              {/* Send Button */}
+              <button 
+                type="button"
+                className="flex items-center justify-center w-12 h-12 md:w-14 md:h-14 rounded-full bg-[#997953] dark:bg-[#cdaa80] text-white dark:text-[#0f1e3f] hover:bg-[#7a6042] dark:hover:bg-[#e0c3a0] hover:scale-105 active:scale-95 hover:shadow-lg hover:shadow-[#cdaa80]/20 transition-all duration-300 shrink-0 cursor-pointer shadow-md z-10 outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#997953] dark:focus:ring-[#cdaa80] dark:focus:ring-offset-[#0f1e3f]"
+              >
+                <svg className="w-5 h-5 md:w-6 md:h-6 ml-1 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  {/* custom send icon like image, plane */}
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10l8-2 10-5-5 10-2 8-3-8-8-3z" />
+                </svg>
+              </button>
+
+            </div>
+          </div>
+        </div>
       </div>
-
-      {/* AI Input Box - Tall empty area with chat at bottom */}
-      <section className="bg-white dark:bg-[#213a56]/80 rounded-2xl border border-gray-200 dark:border-[#cdaa80]/30 p-6 flex flex-col justify-end min-h-[450px] mb-10 shadow-xl shadow-gray-200/50 dark:shadow-2xl relative overflow-hidden">
-        
-        {/* Subtle background glow/gradient if desired */}
-        <div className="absolute inset-0 bg-gradient-to-b from-gray-50/40 to-gray-100/90 dark:from-[#0f1e3f]/40 dark:to-[#0f1e3f]/90 pointer-events-none" />
-
-        <div className="relative z-10 w-full space-y-4">
-          <div className="space-y-1.5">
-            <h2 className="text-sm font-medium text-[#997953] dark:text-[#cdaa80] flex items-center gap-2">
-              Namaste! <span role="img" aria-label="folded hands">🙏</span> I'm NyayaAI.
-            </h2>
-            <p className="text-gray-700 dark:text-white/80 text-sm">
-              Describe your legal situation and I will analyze the applicable laws and suggest next steps. You can also upload documents or evidence!
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3 w-full">
-            <button 
-              type="button"
-              className="flex items-center justify-center w-11 h-11 rounded-full border border-gray-300 dark:border-[#cdaa80]/40 bg-white dark:bg-[#0f1e3f] text-[#997953] dark:text-[#cdaa80] hover:bg-gray-100 dark:hover:bg-[#997953] hover:text-gray-900 dark:hover:text-white dark:hover:border-[#997953] transition-colors shrink-0 outline-none focus:ring-2 focus:ring-[#997953]/50 dark:focus:ring-[#cdaa80]/50"
-              aria-label="Upload document"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
-              </svg>
-            </button>
-            <div className="flex-1 relative">
-              <input 
-                type="text" 
-                placeholder="Describe your legal situation..." 
-                className="w-full bg-white dark:bg-[#0f1e3f] border border-gray-300 dark:border-[#cdaa80] rounded-full px-6 py-3 text-sm outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/50 focus:ring-1 focus:ring-[#997953] dark:focus:ring-[#cdaa80] focus:border-[#997953] dark:focus:border-[#cdaa80] transition-all shadow-sm"
-              />
-            </div>
-            <button 
-              type="button"
-              className="flex items-center justify-center w-11 h-11 rounded-full bg-[#997953] dark:bg-[#cdaa80] text-white dark:text-[#0f1e3f] hover:bg-[#7a6042] dark:hover:bg-[#997953] hover:text-white transition-colors shrink-0 outline-none focus:ring-2 focus:ring-[#997953] dark:focus:ring-[#cdaa80] focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-[#0f1e3f]"
-            >
-              <svg className="w-4 h-4 ml-0.5 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* Recent Legal Cases Section */}
-      <section>
-        <div className="flex justify-between items-end mb-4 px-1">
-          <h2 className="text-[15px] font-medium text-[#997953] dark:text-[#cdaa80]">Recent Legal Cases</h2>
-          <span className="text-xs text-gray-500 dark:text-white/50">Latest activity</span>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          
-          {/* Card 1 */}
-          <div className="bg-white dark:bg-[#213a56] rounded-xl border border-gray-200 dark:border-[#cdaa80]/20 p-5 flex flex-col hover:border-gray-300 dark:hover:border-[#cdaa80]/50 transition-colors cursor-pointer shadow-md shadow-gray-200/50 dark:shadow-black/20">
-            <div className="flex justify-between items-start mb-3">
-              <div className="flex items-center gap-1.5 text-[11px] text-[#997953] dark:text-[#cdaa80]">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#997953] dark:bg-[#cdaa80]"></div>
-                <span>DL-2026-00105</span>
-              </div>
-              <span className="inline-flex items-center px-3 py-1 rounded text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-[#cdaa80] dark:text-[#0f1e3f]">
-                Under Analysis
-              </span>
-            </div>
-            
-            <h3 className="text-sm text-gray-900 dark:text-white font-medium mb-4 leading-relaxed line-clamp-2">
-              Landlord refusing to return security deposit
-            </h3>
-            
-            <div className="space-y-2 mt-auto">
-              <div className="flex items-center gap-2 text-[11px] text-gray-500 dark:text-white/60">
-                <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <span className="line-clamp-1">Delhi District Court Jurisdiction</span>
-              </div>
-              <div className="flex items-center gap-2 text-[11px] text-gray-500 dark:text-white/60">
-                <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-                <span className="line-clamp-1">Tenant Law</span>
-              </div>
-            </div>
-            
-            <div className="mt-5 text-[10px] text-gray-400 dark:text-white/40">
-              20h ago
-            </div>
-          </div>
-
-          {/* Card 2 */}
-          <div className="bg-white dark:bg-[#213a56] rounded-xl border border-gray-200 dark:border-[#cdaa80]/20 p-5 flex flex-col hover:border-gray-300 dark:hover:border-[#cdaa80]/50 transition-colors cursor-pointer shadow-md shadow-gray-200/50 dark:shadow-black/20">
-            <div className="flex justify-between items-start mb-3">
-              <div className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-white/60">
-                <div className="w-1.5 h-1.5 rounded-full bg-gray-400 dark:bg-white/60"></div>
-                <span>DL-2026-00094</span>
-              </div>
-              <span className="inline-flex items-center px-3 py-1 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200 dark:border-none dark:bg-[#0f1e3f] dark:text-[#cdaa80] dark:border-[#cdaa80]/30">
-                Drafting Notice
-              </span>
-            </div>
-            
-            <h3 className="text-sm text-gray-900 dark:text-white font-medium mb-4 leading-relaxed line-clamp-2">
-              Employer withheld final salary after resignation
-            </h3>
-            
-            <div className="space-y-2 mt-auto">
-              <div className="flex items-center gap-2 text-[11px] text-gray-500 dark:text-white/60">
-                <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <span className="line-clamp-1">Bangalore Labour Court</span>
-              </div>
-              <div className="flex items-center gap-2 text-[11px] text-gray-500 dark:text-white/60">
-                <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-                <span className="line-clamp-1">Labour Law</span>
-              </div>
-            </div>
-            
-            <div className="mt-5 text-[10px] text-gray-400 dark:text-white/40">
-              5d ago
-            </div>
-          </div>
-
-          {/* Card 3 */}
-          <div className="bg-white dark:bg-[#213a56] rounded-xl border border-gray-200 dark:border-[#cdaa80]/20 p-5 flex flex-col hover:border-gray-300 dark:hover:border-[#cdaa80]/50 transition-colors cursor-pointer shadow-md shadow-gray-200/50 dark:shadow-black/20">
-             <div className="flex justify-between items-start mb-3">
-              <div className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-white/60">
-                <div className="w-1.5 h-1.5 rounded-full bg-gray-400 dark:bg-white/60"></div>
-                <span>DL-2026-00091</span>
-              </div>
-              <span className="inline-flex items-center px-3 py-1 rounded text-[10px] font-medium bg-green-100 text-green-800 dark:bg-[#cdaa80] dark:text-[#0f1e3f]">
-                Submitted
-              </span>
-            </div>
-            
-            <h3 className="text-sm text-gray-900 dark:text-white font-medium mb-4 leading-relaxed line-clamp-2">
-              Online fraud through payment app
-            </h3>
-            
-            <div className="space-y-2 mt-auto">
-              <div className="flex items-center gap-2 text-[11px] text-gray-500 dark:text-white/60">
-                <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <span className="line-clamp-1">Cyber Crime Cell — Mumbai</span>
-              </div>
-              <div className="flex items-center gap-2 text-[11px] text-gray-500 dark:text-white/60">
-                <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-                <span className="line-clamp-1">Cyber Law</span>
-              </div>
-            </div>
-            
-            <div className="mt-5 text-[10px] text-gray-400 dark:text-white/40">
-              5d ago
-            </div>
-          </div>
-
-        </div>
-      </section>
       
-      {/* Footer */}
-      <Footer
-        themeColors={{
-          bgLight: '#f9fafb',
-          bgDark: '#0f1e3f',
-          cardBgLight: '#ffffff',
-          cardBgDark: '#0f1e3f',
-          textLight: '#111827',
-          textDark: '#cdaa80',
-          accent: '#997953',
-          accentHover: '#7a6042',
-        }}
-        logoText="NyayAI"
-        copyrightText="© 2026 NyayAI. All rights reserved."
-      />
-
-      </div>
+      {/* Global CSS for the custom scrollbar */}
+      <style dangerouslySetInnerHTML={{__html: `
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 5px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background-color: rgba(205, 170, 128, 0.2);
+          border-radius: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background-color: rgba(205, 170, 128, 0.5);
+        }
+      `}} />
     </div>
   );
 }
