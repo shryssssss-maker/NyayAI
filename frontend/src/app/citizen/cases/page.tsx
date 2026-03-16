@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import { Footer } from '../../../../components/footer';
+import { Sidebar } from '../../../../components/sidebar';
 
 // Example cases data
 const INITIAL_CASES = [
@@ -81,7 +83,11 @@ export default function CaseHistory() {
   );
 
   return (
-    <div className="max-w-[1200px] mx-auto p-6 md:p-8 text-white h-screen flex flex-col bg-[#0f1e3f]">
+    <div className="flex min-h-screen bg-[#0f1e3f]">
+      <div className="md:sticky md:top-0 md:h-screen shrink-0 z-50">
+        <Sidebar />
+      </div>
+      <div className="flex-1 max-w-[1200px] mx-auto p-6 md:p-8 text-white flex flex-col pb-24 md:pb-8">
       
       {/* Top Header/Nav Area */}
       <div className="flex border-b border-[#213a56] pb-2 mb-6 shrink-0">
@@ -214,7 +220,23 @@ export default function CaseHistory() {
           background-color: #cdaa80;
         }
       `}} />
-      
+
+      {/* Footer */}
+      <Footer
+        themeColors={{
+          bgLight: '#0f1e3f',
+          bgDark: '#0f1e3f',
+          cardBgLight: '#0f1e3f',
+          cardBgDark: '#0f1e3f',
+          textLight: '#ffffff',
+          textDark: '#cdaa80',
+          accent: '#cdaa80',
+          accentHover: '#997953',
+        }}
+        logoText="NyayAI"
+        copyrightText="© 2026 NyayAI. All rights reserved."
+      />
+    </div>
     </div>
   );
 }
