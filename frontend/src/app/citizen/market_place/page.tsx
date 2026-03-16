@@ -161,17 +161,22 @@ export default function LawyerMarketplace() {
   }, [isExperienceOpen]);
 
   return (
-    <div className="max-w-[1200px] mx-auto p-6 md:p-10 text-white min-h-screen bg-[#0f1e3f] font-serif">
-      
-      {/* Header Section */}
-      <div className="mb-10 animate-fade-in">
-        <h1 className="text-3xl font-medium tracking-wide text-[#cdaa80] mb-2 font-serif">
-          Lawyer Marketplace
-        </h1>
-        <p className="text-white/70 text-[15px] font-sans">
-          Browse verified lawyers matched to your legal case and consult them directly.
-        </p>
+    <div className="flex min-h-screen bg-gray-50 dark:bg-[#0f1e3f]">
+      <div className="md:sticky md:top-0 md:h-screen shrink-0 z-50">
+        <Sidebar />
       </div>
+
+      <div className="flex-1 max-w-[1200px] mx-auto p-6 md:p-10 text-gray-900 dark:text-white font-serif">
+        
+        {/* Header Section */}
+        <div className="mb-10 animate-fade-in">
+          <h1 className="text-3xl font-medium tracking-wide text-[#997953] dark:text-[#cdaa80] mb-2 font-serif">
+            Lawyer Marketplace
+          </h1>
+          <p className="text-gray-600 dark:text-white/70 text-[15px] font-sans">
+            Browse verified lawyers matched to your legal case and consult them directly.
+          </p>
+        </div>
 
       {/* Filters Section */}
       <div className="flex flex-wrap gap-4 mb-8 font-sans">
@@ -219,33 +224,33 @@ export default function LawyerMarketplace() {
           </div>
         </div>
 
-        {/* Price Range Toggle Group */}
-        <div className="flex bg-[#0f1e3f] border border-[#cdaa80]/50 rounded-lg overflow-hidden shrink-0">
-          <button 
-            onClick={() => setActivePriceFilter('under10k')}
-            className={`px-5 py-2.5 text-sm transition-all duration-200 border-r border-[#cdaa80]/30 text-center
-              ${activePriceFilter === 'under10k' ? 'bg-[#cdaa80] text-[#0f1e3f] font-medium' : 'text-[#cdaa80] hover:bg-[#213a56]'}
-            `}
-          >
-            &lt; ₹10k
-          </button>
-          <button 
-            onClick={() => setActivePriceFilter('10k-25k')}
-            className={`px-5 py-2.5 text-sm transition-all duration-200 border-r border-[#cdaa80]/30 text-center
-              ${activePriceFilter === '10k-25k' ? 'bg-[#cdaa80] text-[#0f1e3f] font-medium' : 'text-[#cdaa80] hover:bg-[#213a56]'}
-            `}
-          >
-            ₹10k - ₹25k
-          </button>
-          <button 
-            onClick={() => setActivePriceFilter('over25k')}
-            className={`px-5 py-2.5 text-sm transition-all duration-200 text-center
-              ${activePriceFilter === 'over25k' ? 'bg-[#cdaa80] text-[#0f1e3f] font-medium' : 'text-[#cdaa80] hover:bg-[#213a56]'}
-            `}
-          >
-            &gt; ₹25k
-          </button>
-        </div>
+          {/* Price Range Toggle Group */}
+          <div className="flex bg-white dark:bg-[#0f1e3f] border border-gray-300 dark:border-[#cdaa80]/50 rounded-lg overflow-hidden shrink-0 shadow-sm">
+            <button 
+              onClick={() => setActivePriceFilter('under10k')}
+              className={`px-5 py-2.5 text-sm transition-all duration-200 border-r border-gray-200 dark:border-[#cdaa80]/30 text-center
+                ${activePriceFilter === 'under10k' ? 'bg-[#997953] dark:bg-[#cdaa80] text-white dark:text-[#0f1e3f] font-medium' : 'text-[#997953] dark:text-[#cdaa80] hover:bg-gray-50 dark:hover:bg-[#213a56]'}
+              `}
+            >
+              &lt; ₹10k
+            </button>
+            <button 
+              onClick={() => setActivePriceFilter('10k-25k')}
+              className={`px-5 py-2.5 text-sm transition-all duration-200 border-r border-gray-200 dark:border-[#cdaa80]/30 text-center
+                ${activePriceFilter === '10k-25k' ? 'bg-[#997953] dark:bg-[#cdaa80] text-white dark:text-[#0f1e3f] font-medium' : 'text-[#997953] dark:text-[#cdaa80] hover:bg-gray-50 dark:hover:bg-[#213a56]'}
+              `}
+            >
+              ₹10k - ₹25k
+            </button>
+            <button 
+              onClick={() => setActivePriceFilter('over25k')}
+              className={`px-5 py-2.5 text-sm transition-all duration-200 text-center
+                ${activePriceFilter === 'over25k' ? 'bg-[#997953] dark:bg-[#cdaa80] text-white dark:text-[#0f1e3f] font-medium' : 'text-[#997953] dark:text-[#cdaa80] hover:bg-gray-50 dark:hover:bg-[#213a56]'}
+              `}
+            >
+              &gt; ₹25k
+            </button>
+          </div>
 
         {/* Experience Dropdown */}
         <div className="relative z-50 shrink-0" ref={expDropdownRef}>
@@ -292,91 +297,91 @@ export default function LawyerMarketplace() {
         </div>
       </div>
 
-      {/* Lawyers List */}
-      <div className="space-y-6">
-        {LAWYERS.map((lawyer) => (
-          <div 
-            key={lawyer.id}
-            onMouseEnter={() => setHoveredCard(lawyer.id)}
-            onMouseLeave={() => setHoveredCard(null)}
-            className={`
-              bg-[#cdaa80] text-[#0f1e3f] rounded-xl p-6 md:p-8 
-              transition-all duration-300 ease-out cursor-pointer relative overflow-hidden shadow-lg
-              ${hoveredCard === lawyer.id ? 'transform -translate-y-1 shadow-2xl brightness-105' : ''}
-            `}
-          >
-            {/* Subtle background texture/pattern effect for the card */}
-            <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#0f1e3f 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+        {/* Lawyers List */}
+        <div className="space-y-6">
+          {LAWYERS.map((lawyer) => (
+            <div 
+              key={lawyer.id}
+              onMouseEnter={() => setHoveredCard(lawyer.id)}
+              onMouseLeave={() => setHoveredCard(null)}
+              className={`
+                bg-white dark:bg-[#cdaa80] text-[#0f1e3f] rounded-xl p-6 md:p-8 
+                transition-all duration-300 ease-out cursor-pointer relative overflow-hidden shadow-lg border border-gray-100 dark:border-transparent
+                ${hoveredCard === lawyer.id ? 'transform -translate-y-1 shadow-2xl brightness-105' : ''}
+              `}
+            >
+              {/* Subtle background texture/pattern effect for the card */}
+              <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#0f1e3f 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
 
-            <div className="flex flex-col md:flex-row justify-between gap-6 relative z-10 transition-transform duration-300">
-              
-              {/* Left Content Area */}
-              <div className="flex-1 space-y-3">
-                <div className="flex justify-between items-start gap-4">
-                     <span className="inline-block px-1.5 py-0.5 bg-[#0f1e3f]/10 rounded text-[10px] font-bold tracking-wider font-sans text-[#0f1e3f]/70 uppercase">
-                      {lawyer.category}
-                    </span>
-                    <div className="md:hidden text-right font-sans mb-2">
-                       <div className="text-lg font-bold font-serif">{lawyer.priceRange}</div>
-                    </div>
-                </div>
+              <div className="flex flex-col md:flex-row justify-between gap-6 relative z-10 transition-transform duration-300">
                 
-                <h2 className="text-xl md:text-2xl font-medium tracking-tight">
-                  <span className="font-semibold">{lawyer.name.split('—')[0]}</span> 
-                  {lawyer.name.includes('—') ? lawyer.name.substring(lawyer.name.indexOf('—')) : ` — ${lawyer.specialty}`}
-                </h2>
-                
-                <p className="text-[#0f1e3f]/80 text-[14px] leading-relaxed font-sans max-w-4xl pr-4">
-                  {lawyer.description}
-                </p>
-                
-                {/* Footer of card */}
-                <div className="pt-4 flex items-center justify-between font-sans">
-                  <div className="flex items-center gap-2">
-                    {lawyer.verified && (
-                      <div className="flex items-center gap-1.5 text-sm font-medium text-[#0f1e3f]/90">
-                        <div className="bg-[#0f1e3f]/20 w-4 h-4 rounded-full flex items-center justify-center font-bold text-[8px]">
-                          A
-                        </div>
-                        Verified Advocate
+                {/* Left Content Area */}
+                <div className="flex-1 space-y-3">
+                  <div className="flex justify-between items-start gap-4">
+                       <span className="inline-block px-1.5 py-0.5 bg-[#0f1e3f]/10 rounded text-[10px] font-bold tracking-wider font-sans text-[#0f1e3f]/70 uppercase">
+                        {lawyer.category}
+                      </span>
+                      <div className="md:hidden text-right font-sans mb-2">
+                         <div className="text-lg font-bold font-serif">{lawyer.priceRange}</div>
                       </div>
-                    )}
                   </div>
-                   <button 
+                  
+                  <h2 className="text-xl md:text-2xl font-medium tracking-tight">
+                    <span className="font-semibold">{lawyer.name.split('—')[0]}</span> 
+                    {lawyer.name.includes('—') ? lawyer.name.substring(lawyer.name.indexOf('—')) : ` — ${lawyer.specialty}`}
+                  </h2>
+                  
+                  <p className="text-[#0f1e3f]/80 text-[14px] leading-relaxed font-sans max-w-4xl pr-4">
+                    {lawyer.description}
+                  </p>
+                  
+                  {/* Footer of card */}
+                  <div className="pt-4 flex items-center justify-between font-sans">
+                    <div className="flex items-center gap-2">
+                      {lawyer.verified && (
+                        <div className="flex items-center gap-1.5 text-sm font-medium text-[#0f1e3f]/90">
+                          <div className="bg-[#0f1e3f]/20 w-4 h-4 rounded-full flex items-center justify-center font-bold text-[8px]">
+                            A
+                          </div>
+                          Verified Advocate
+                        </div>
+                      )}
+                    </div>
+                     <button 
+                      className={`
+                        md:hidden
+                        px-5 py-1.5 border border-[#0f1e3f]/30 rounded-lg text-sm font-medium font-sans
+                        transition-all duration-300
+                        ${hoveredCard === lawyer.id ? 'bg-[#0f1e3f] text-[#cdaa80] border-[#0f1e3f]' : 'hover:bg-[#0f1e3f]/5'}
+                      `}
+                    >
+                      View Profile
+                    </button>
+                  </div>
+                </div>
+
+                {/* Right Content Area (Pricing & CTA) */}
+                <div className="hidden md:flex flex-col items-end justify-between shrink-0 pl-6 border-l border-[#0f1e3f]/10">
+                  <div className="text-right font-sans">
+                    <div className="text-[17px] font-bold font-serif mb-1">{lawyer.priceRange}</div>
+                    <div className="flex items-center justify-end gap-1 text-[11px] text-[#0f1e3f]/70 whitespace-nowrap">
+                      <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      {lawyer.responseTime}
+                    </div>
+                  </div>
+                  
+                  <button 
                     className={`
-                      md:hidden
-                      px-5 py-1.5 border border-[#0f1e3f]/30 rounded-lg text-sm font-medium font-sans
-                      transition-all duration-300
+                      px-6 py-1.5 border border-[#0f1e3f]/30 rounded-lg text-sm font-medium font-sans
+                      transition-all duration-300 mt-4
                       ${hoveredCard === lawyer.id ? 'bg-[#0f1e3f] text-[#cdaa80] border-[#0f1e3f]' : 'hover:bg-[#0f1e3f]/5'}
                     `}
                   >
                     View Profile
                   </button>
                 </div>
-              </div>
-
-              {/* Right Content Area (Pricing & CTA) */}
-              <div className="hidden md:flex flex-col items-end justify-between shrink-0 pl-6 border-l border-[#0f1e3f]/10">
-                <div className="text-right font-sans">
-                  <div className="text-[17px] font-bold font-serif mb-1">{lawyer.priceRange}</div>
-                  <div className="flex items-center justify-end gap-1 text-[11px] text-[#0f1e3f]/70 whitespace-nowrap">
-                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    {lawyer.responseTime}
-                  </div>
-                </div>
-                
-                <button 
-                  className={`
-                    px-6 py-1.5 border border-[#0f1e3f]/30 rounded-lg text-sm font-medium font-sans
-                    transition-all duration-300 mt-4
-                    ${hoveredCard === lawyer.id ? 'bg-[#0f1e3f] text-[#cdaa80] border-[#0f1e3f]' : 'hover:bg-[#0f1e3f]/5'}
-                  `}
-                >
-                  View Profile
-                </button>
-              </div>
 
             </div>
           </div>

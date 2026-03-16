@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import gsap from 'gsap';
 import { Menu, Home, Phone, Edit3, User, MapPin, Mail, HelpCircle, Sun, Moon } from 'lucide-react';
 import { useTheme } from './themeprovider'; // Adjust path to your ThemeProvider
@@ -13,6 +14,7 @@ export interface NavItem {
   id: string;
   icon: React.ElementType;
   label?: string;
+  href?: string;
   onClick?: () => void;
 }
 
@@ -54,12 +56,12 @@ const DEFAULT_THEME: SidebarThemeColors = {
 
 const DEFAULT_NAV_ITEMS: NavItem[] = [
   { id: 'menu', icon: Menu, label: 'Menu' },
-  { id: 'home', icon: Home, label: 'Home' },
-  { id: 'phone', icon: Phone, label: 'Contact' },
-  { id: 'edit', icon: Edit3, label: 'Edit' },
-  { id: 'user', icon: User, label: 'Profile' },
-  { id: 'location', icon: MapPin, label: 'Location' },
-  { id: 'mail', icon: Mail, label: 'Messages' },
+  { id: 'home', icon: Home, label: 'Home', href: '/citizen/home' },
+  { id: 'phone', icon: Phone, label: 'Contact', href: '/citizen/cases' },
+  { id: 'edit', icon: Edit3, label: 'Cases', href: '/citizen/cases' },
+  { id: 'user', icon: User, label: 'Profile', href: '/citizen/settings' },
+  { id: 'location', icon: MapPin, label: 'Marketplace', href: '/citizen/market_place' },
+  { id: 'mail', icon: Mail, label: 'Messages', href: '/citizen/home' },
 ];
 
 // ==========================================
@@ -77,8 +79,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const sidebarRef = useRef<HTMLElement>(null);
   const iconRefs = useRef<(HTMLDivElement | null)[]>([]);
   const labelRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  const themeIconRef = useRef<HTMLDivElement | null>(null);
   const expandTlRef = useRef<gsap.core.Timeline | null>(null);
 
+  const router = useRouter();
   const { theme, toggleTheme, mounted } = useTheme();
 
   // Merge default colors with any user-provided overrides
@@ -193,13 +197,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const handleThemeToggle = () => {
-    const themeToggleRef = iconRefs.current[navItems.length];
-    if (themeToggleRef) {
-      gsap.fromTo(
-        themeToggleRef,
-        { rotate: 0 },
-        { rotate: 180, duration: 0.35, ease: 'power2.out', yoyo: true, repeat: 1, overwrite: 'auto' }
-      );
+    if (themeIconRef.current) {
+      gsap.to(themeIconRef.current, {
+        rotate: theme === 'dark' ? 0 : 35,
+        duration: 0.3,
+        ease: 'power2.out',
+        overwrite: 'auto',
+      });
     }
     toggleTheme();
   };
@@ -231,8 +235,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
               key={item.id}
               ref={(el) => { iconRefs.current[index] = el; }}
               onClick={() => {
-                if (isMenuTop) handleMenuToggle();
-                if (item.onClick) item.onClick();
+                if (isMenuTop) {
+                  handleMenuToggle();
+                  return;
+                }
+
+                if (item.href) {
+                  router.push(item.href);
+                }
+
+                if (item.onClick) {
+                  item.onClick();
+                }
               }}
               title={item.label}
               className={`
@@ -272,11 +286,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
           >
-            {theme === 'dark' ? (
-              <Sun size={24} strokeWidth={2.25} className="shrink-0" />
-            ) : (
-              <Moon size={24} strokeWidth={2.25} className="shrink-0" />
-            )}
+            <div
+              ref={themeIconRef}
+              className="shrink-0 transition-transform duration-300"
+              style={{ transform: `rotate(${theme === 'dark' ? 0 : 35}deg)` }}
+            >
+              {theme === 'dark' ? (
+                <Sun size={24} strokeWidth={2.25} />
+              ) : (
+                <Moon size={24} strokeWidth={2.25} />
+              )}
+            </div>
             <span
               ref={(el) => { labelRefs.current[navItems.length] = el; }}
               className={`
