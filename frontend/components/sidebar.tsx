@@ -218,7 +218,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       style={dynamicStyles}
       className={`
         fixed bottom-0 w-full h-16 flex-row rounded-t-3xl overflow-x-auto shadow-xl z-50 py-2 px-4
-        md:relative md:h-full md:flex-col md:rounded-none md:rounded-l-[2.5rem] md:shadow-none md:py-10 md:px-0 md:overflow-visible
+        md:relative md:h-full md:flex-col md:rounded-none md:shadow-none md:py-10 md:px-0 md:overflow-visible
         flex justify-between items-center 
         bg-[var(--sb-bg-light)] dark:bg-[var(--sb-bg-dark)] 
         text-[var(--sb-text-light)] dark:text-[var(--sb-text-dark)] 
