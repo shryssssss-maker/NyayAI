@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState,} from 'react';
+import React, { useEffect, useMemo, useRef, useState, } from 'react';
 import gsap from 'gsap';
 import { useGSAP } from '@gsap/react';
 import { Footer } from '../../../../components/footer';
@@ -198,12 +198,12 @@ export default function CaseHistory() {
         { opacity: 0, y: -30 },
         { opacity: 1, y: 0, duration: 0.8, ease: 'power3.out' }
       )
-      .fromTo(
-        '.cases-search-sort',
-        { opacity: 0, y: -20, scale: 0.95 },
-        { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: 'power3.out' },
-        '-=0.4'
-      );
+        .fromTo(
+          '.cases-search-sort',
+          { opacity: 0, y: -20, scale: 0.95 },
+          { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: 'power3.out' },
+          '-=0.4'
+        );
     },
     { scope: pageRef }
   );
@@ -215,12 +215,12 @@ export default function CaseHistory() {
       gsap.fromTo(
         '.case-card',
         { opacity: 0, y: 30 },
-        { 
-          opacity: 1, 
-          y: 0, 
-          stagger: 0.08, 
-          duration: 0.6, 
-          ease: 'back.out(1.2)', 
+        {
+          opacity: 1,
+          y: 0,
+          stagger: 0.08,
+          duration: 0.6,
+          ease: 'back.out(1.2)',
           clearProps: 'all'
         }
       );
@@ -268,13 +268,14 @@ export default function CaseHistory() {
         <Sidebar />
       </div>
       <div className="flex-1 max-w-[1200px] mx-auto p-6 md:p-8 text-gray-900 dark:text-white flex flex-col pb-24 md:pb-8">
-        {/* Top Header/Nav Area */}
-        <div className="cases-top-nav flex border-b border-[#d8c1a1] dark:border-[#213a56] pb-2 mb-6 shrink-0">
-          <nav className="flex gap-6 text-sm">
-            <button className="text-[#cdaa80] border-b-2 border-[#cdaa80] pb-2 font-medium">
-              Cases
-            </button>
-          </nav>
+        {/* Header */}
+        <div className="mb-10">
+          <h1 className="text-3xl font-medium tracking-wide text-[#997953] dark:text-[#cdaa80] mb-2 font-serif">
+            Cases
+          </h1>
+          <p className="text-gray-600 dark:text-white/70 text-[15px] font-sans">
+            Manage and track the progress of your legal cases and match with advocates.
+          </p>
         </div>
 
         {/* Search and Filters Area */}
@@ -314,11 +315,10 @@ export default function CaseHistory() {
           <div className="relative z-50 shrink-0" ref={dropdownRef}>
             <button
               onClick={() => setIsSortOpen((v) => !v)}
-              className={`flex items-center gap-3 bg-white dark:bg-[#0f1e3f] border border-[#d8c1a1] dark:border-[#cdaa80]/50 text-[#443831] dark:text-[#cdaa80] px-4 py-2.5 rounded-lg transition-colors focus:ring-2 focus:ring-[#997953]/20 dark:focus:ring-[#cdaa80]/30 outline-none shadow-sm w-56 ${
-                isSortOpen
+              className={`flex items-center gap-3 bg-white dark:bg-[#0f1e3f] border border-[#d8c1a1] dark:border-[#cdaa80]/50 text-[#443831] dark:text-[#cdaa80] px-4 py-2.5 rounded-lg transition-colors focus:ring-2 focus:ring-[#997953]/20 dark:focus:ring-[#cdaa80]/30 outline-none shadow-sm w-56 ${isSortOpen
                   ? 'bg-[#f7efe5] ring-1 ring-[#997953]/30 dark:bg-[#213a56] dark:ring-[#cdaa80]/50'
                   : 'hover:bg-[#f9f4ec] dark:hover:bg-[#213a56]'
-              }`}
+                }`}
             >
               <svg
                 className="w-5 h-5 shrink-0 opacity-80"
@@ -337,9 +337,8 @@ export default function CaseHistory() {
                 {sortOptions.find((opt) => opt.value === sortOption)?.label || 'Sort'}
               </span>
               <svg
-                className={`w-4 h-4 shrink-0 transition-transform duration-300 ${
-                  isSortOpen ? 'rotate-180' : ''
-                }`}
+                className={`w-4 h-4 shrink-0 transition-transform duration-300 ${isSortOpen ? 'rotate-180' : ''
+                  }`}
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -365,11 +364,10 @@ export default function CaseHistory() {
                       setSortOption(option.value);
                       setIsSortOpen(false);
                     }}
-                    className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
-                      sortOption === option.value
+                    className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${sortOption === option.value
                         ? 'bg-[#f6ede1] text-[#997953] font-medium dark:bg-[#cdaa80]/20 dark:text-[#cdaa80]'
                         : 'text-[#5b4b3d] hover:bg-[#f8f1e7] hover:text-[#443831] dark:text-white/80 dark:hover:bg-[#213a56] dark:hover:text-[#cdaa80]'
-                    }`}
+                      }`}
                   >
                     {option.label}
                   </button>
@@ -512,9 +510,9 @@ export default function CaseHistory() {
                                 <div className="text-sm font-sans text-[#2f261f] dark:text-white/85 font-medium">
                                   {typeof o.offer_amount === 'number' ? `₹${o.offer_amount.toLocaleString('en-IN')}` : 'Offer received'}
                                 </div>
-                                {o.offer_message && (
+                                {o.offer_note && (
                                   <div className="mt-1 text-[12px] font-sans text-[#5b4b3d] dark:text-white/70 break-words">
-                                    {o.offer_message}
+                                    {o.offer_note}
                                   </div>
                                 )}
                                 <div className="mt-1 text-[11px] font-sans text-[#5b4b3d] dark:text-white/60">
