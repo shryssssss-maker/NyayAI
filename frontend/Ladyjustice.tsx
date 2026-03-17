@@ -18,8 +18,8 @@ type GLTFResult = GLTF & {
   }
 }
 
-export function Model(props: JSX.IntrinsicElements['group']) {
-  const { nodes, materials } = useGLTF('/ladyjustice-transformed.glb') as GLTFResult
+export function Model(props: React.ComponentProps<'group'>) {
+  const { nodes, materials } = useGLTF('/ladyjustice-transformed.glb') as unknown as GLTFResult
   return (
     <group {...props} dispose={null}>
       <mesh castShadow receiveShadow geometry={nodes.edit1.geometry} material={materials['tripo_mat_50fb2bec-b861-4101-a34f-eceebf27a040.003']} />
