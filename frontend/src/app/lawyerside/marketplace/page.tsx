@@ -407,43 +407,46 @@ export default function LawyerCaseMarketplace() {
 
       <div className="flex-1 max-w-[1200px] mx-auto p-6 md:p-10 text-gray-900 dark:text-white font-serif">
 
-        {/* Header */}
-        <div className="mb-10">
-          <h1 className="text-3xl font-medium tracking-wide text-[#997953] dark:text-[#cdaa80] mb-2 font-serif">
-            Case Marketplace
-          </h1>
-          <p className="text-gray-600 dark:text-white/70 text-[15px] font-sans">
-            Browse unassigned cases matching your specialisations and send offers to represent clients.
-          </p>
-          {!(activeTab === 'left' ? isLoading : offeredLoading) && (
-            <div className={`mt-3 inline-flex items-center gap-2 text-xs font-sans px-3 py-1 rounded-full ${activeTab === 'left' ? statusPillClass : (offeredError ? statusPillClass : statusPillClass)}`}>
-              <div className={`w-1.5 h-1.5 rounded-full ${activeTab === 'left' ? statusDotClass : (offeredError ? 'bg-red-500 dark:bg-red-400' : statusDotClass)}`} />
-              {activeTab === 'left'
-                ? (dbError ? `Error: ${dbError}` : `${filteredCases.length} of ${allCases.length} cases shown`)
-                : (offeredError ? `Error: ${offeredError}` : `${filteredOffered.length} of ${offeredCases.length} offered cases shown`)
-              }
-            </div>
-          )}
-          {lawyerProfile && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {(lawyerProfile.specialisations ?? []).map(spec => (
-                <span key={spec} className="px-2.5 py-0.5 bg-[#997953]/10 dark:bg-[#cdaa80]/15 rounded-full text-[11px] font-sans text-[#997953] dark:text-[#cdaa80] font-medium">
-                  {formatDomain(spec)}
-                </span>
-              ))}
-            </div>
-          )}
+        {/* Header Section */}
+        <div className="mb-8 flex flex-col md:flex-row justify-between items-start gap-6">
+          <div className="flex-1">
+            <h1 className="text-3xl font-medium tracking-wide text-[#997953] dark:text-[#cdaa80] mb-2 font-serif">
+              Case Marketplace
+            </h1>
+            <p className="text-gray-600 dark:text-white/70 text-[15px] font-sans">
+              Browse unassigned cases matching your specialisations and send offers to represent clients.
+            </p>
+            {!(activeTab === 'left' ? isLoading : offeredLoading) && (
+              <div className={`mt-3 inline-flex items-center gap-2 text-xs font-sans px-3 py-1 rounded-full ${activeTab === 'left' ? statusPillClass : (offeredError ? statusPillClass : statusPillClass)}`}>
+                <div className={`w-1.5 h-1.5 rounded-full ${activeTab === 'left' ? statusDotClass : (offeredError ? 'bg-red-500 dark:bg-red-400' : statusDotClass)}`} />
+                {activeTab === 'left'
+                  ? (dbError ? `Error: ${dbError}` : `${filteredCases.length} of ${allCases.length} cases shown`)
+                  : (offeredError ? `Error: ${offeredError}` : `${filteredOffered.length} of ${offeredCases.length} offered cases shown`)
+                }
+              </div>
+            )}
+            {lawyerProfile && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {(lawyerProfile.specialisations ?? []).map(spec => (
+                  <span key={spec} className="px-2.5 py-0.5 bg-[#997953]/10 dark:bg-[#cdaa80]/15 rounded-full text-[11px] font-sans text-[#997953] dark:text-[#cdaa80] font-medium">
+                    {formatDomain(spec)}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Repositioned & Resized Slider */}
+          <div className="shrink-0 flex items-center justify-end transform scale-[0.7] origin-top-right md:pt-1">
+            <LiquidSlider
+              leftLabel="Available"
+              rightLabel="Offered"
+              value={activeTab}
+              onChange={setActiveTab}
+            />
+          </div>
         </div>
 
-        {/* Tab Slider */}
-        <div className="mb-10 flex justify-center">
-          <LiquidSlider
-            leftLabel="Available Cases"
-            rightLabel="Offered Cases"
-            value={activeTab}
-            onChange={setActiveTab}
-          />
-        </div>
 
         {/* Filters */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-12 font-sans w-full relative z-40">
