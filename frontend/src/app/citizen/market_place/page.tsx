@@ -504,7 +504,7 @@ function MarketplaceContent() {
 
               return (
                 <Link
-                  href={`/citizen/lawyer/${lawyer.id}`}
+                  href={`/citizen/lawyer/${lawyer.id}?domain=${encodeURIComponent(selectedLawType !== 'Law Type' ? selectedLawType : primaryDomain)}`}
                   key={lawyer.id}
                   onMouseEnter={() => setHoveredCard(lawyer.id)}
                   onMouseLeave={() => setHoveredCard(null)}
