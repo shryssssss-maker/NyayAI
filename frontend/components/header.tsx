@@ -7,6 +7,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import { useTheme } from "./themeprovider";
 import ThemeToggle from "./Themetogglebutton";
+import LoginButton from "./login-button";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger, useGSAP);
@@ -55,23 +56,19 @@ const DEFAULT_NAV_ITEMS: NavItem[] = [
   { label: "VISIT", href: "/visit" },
 ];
 
-const DefaultNineDotIcon = () => (
-  <button className="grid grid-cols-3 gap-0.5 p-1 w-6 h-6 items-center justify-center opacity-70 hover:opacity-100 transition-opacity">
-    {Array.from({ length: 9 }).map((_, i) => (
-      <div key={i} className="w-1 h-1 rounded-full bg-current" />
-    ))}
-  </button>
-);
+
 
 export default function Header({
   logoText = "LOURVE",
   navLinks = DEFAULT_NAV_ITEMS,
   rightAction,
-  rightIcon = <DefaultNineDotIcon />,
+  rightIcon,
   themeColors = DEFAULT_THEME,
 }: HeaderProps) {
   const headerRef = useRef<HTMLElement>(null);
   const bgRef = useRef<HTMLDivElement>(null);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
+  const menuItemRefsRef = useRef<(HTMLElement | null)[]>([]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { theme, mounted } = useTheme();
 
@@ -90,7 +87,7 @@ export default function Header({
     );
   }, [mounted]);
 
-  // 2. FIXED SCROLL ANIMATION: Sliding background
+  // 2. FIXED SCROLL ANIMATION: Sliding background (Desktop only)
   useGSAP(() => {
     if (!mounted || !headerRef.current || !bgRef.current) return;
 
@@ -144,6 +141,83 @@ export default function Header({
     };
   }, [mounted, resolvedTheme]); // Re-run if theme flips between dark/light
 
+  // 3. MOBILE MENU ANIMATION: Smooth background color transition on mobile
+  useGSAP(() => {
+    if (!mounted || !headerRef.current) return;
+
+    gsap.to(headerRef.current, {
+      backgroundColor: isMobileMenuOpen ? resolvedTheme.bgScrolled : "transparent",
+      color: isMobileMenuOpen ? resolvedTheme.textScrolled : resolvedTheme.textInitial,
+      duration: 0.3,
+      ease: "power2.out",
+    });
+  }, [isMobileMenuOpen, mounted, resolvedTheme]);
+
+  // 4. MOBILE MENU EXPANSION ANIMATION: Smooth slide-down and stagger items
+  useGSAP(() => {
+    if (!mounted || !mobileMenuRef.current) return;
+
+    const menuOverlay = mobileMenuRef.current;
+    const menuItems = menuItemRefsRef.current.filter(Boolean);
+
+    if (isMobileMenuOpen) {
+      // Opening animation
+      gsap.fromTo(
+        menuOverlay,
+        {
+          height: 0,
+          opacity: 0,
+          pointerEvents: "none",
+        },
+        {
+          height: "auto",
+          opacity: 1,
+          pointerEvents: "auto",
+          duration: 0.4,
+          ease: "power3.out",
+        }
+      );
+
+      // Stagger animation for menu items
+      gsap.fromTo(
+        menuItems,
+        {
+          opacity: 0,
+          y: -10,
+        },
+        {
+          opacity: 1,
+          y: 0,
+          duration: 0.3,
+          stagger: 0.08,
+          ease: "power2.out",
+          delay: 0.1,
+        }
+      );
+    } else {
+      // Closing animation
+      gsap.to(menuItems, {
+        opacity: 0,
+        y: -10,
+        duration: 0.2,
+        stagger: 0.04,
+        ease: "power2.in",
+      });
+
+      gsap.to(
+        menuOverlay,
+        {
+          height: 0,
+          opacity: 0,
+          pointerEvents: "none",
+          duration: 0.3,
+          ease: "power3.in",
+          delay: 0.1,
+        }
+      );
+    }
+  }, [isMobileMenuOpen, mounted]);
+
   // Prevent hydration mismatch
   if (!mounted) return null;
 
@@ -151,19 +225,18 @@ export default function Header({
     <header
       ref={headerRef}
       style={{
-        backgroundColor: "transparent",
         color: resolvedTheme.textInitial,
         opacity: 0 // GSAP will take over and animate this to 1
       }}
       className="fixed top-0 left-0 w-full z-50 transition-shadow duration-300"
     >
-      {/* Animated Sliding Background */}
-      <div 
+      {/* Animated Sliding Background - Only on Desktop */}
+      <div
         ref={bgRef}
-        className="absolute inset-0 w-full h-full -z-10 origin-top shadow-md"
+        className="absolute inset-0 w-full h-full -z-10 origin-top shadow-md hidden md:block"
         style={{ backgroundColor: resolvedTheme.bgScrolled, transform: 'scaleY(0)' }}
       />
-      
+
       <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
 
         {/* Left Side: Theme Toggle & Text Logo */}
@@ -178,22 +251,25 @@ export default function Header({
           </Link>
         </div>
 
-        {/* Center: Desktop Nav Links */}
-        <nav className="hidden md:flex items-center gap-8 text-xs font-semibold tracking-widest uppercase">
-          {navLinks.map((link, idx) => (
-            <Link
-              key={idx}
-              href={link.href}
-              className="hover:opacity-60 transition-opacity relative group"
-            >
-              {link.label}
-              <span className="absolute -bottom-1 left-0 w-0 h-[2px] bg-current transition-all duration-300 group-hover:w-full"></span>
-            </Link>
-          ))}
-        </nav>
+        {/* Center: Empty spacer */}
+        <div className="flex-1"></div>
 
         {/* Right Side */}
         <div className="flex items-center gap-6">
+          {/* Desktop Nav Links - Moved to right side */}
+          <nav className="hidden md:flex items-center gap-8 text-xs font-semibold tracking-widest uppercase">
+            {navLinks.map((link, idx) => (
+              <Link
+                key={idx}
+                href={link.href}
+                className="hover:opacity-60 transition-opacity relative group"
+              >
+                {link.label}
+                <span className="absolute -bottom-1 left-0 w-0 h-[2px] bg-current transition-all duration-300 group-hover:w-full"></span>
+              </Link>
+            ))}
+          </nav>
+
           {rightAction && (
             <div className="hidden md:block scale-75">
               {rightAction}
@@ -201,7 +277,7 @@ export default function Header({
           )}
 
           <div className="hidden md:block">
-            {rightIcon}
+            {rightIcon || <LoginButton hoverTextColor={resolvedTheme.bgScrolled} />}
           </div>
 
           <button
@@ -217,15 +293,19 @@ export default function Header({
         {/* Mobile Nav Overlay */}
         {isMobileMenuOpen && (
           <div
-            className="md:hidden absolute top-full left-0 w-full py-6 px-6 flex flex-col gap-4 shadow-lg border-t border-black/10"
+            ref={mobileMenuRef}
+            className="md:hidden absolute top-full left-0 w-full py-6 px-6 flex flex-col gap-4 shadow-lg border-t border-black/10 overflow-hidden"
             style={{
               backgroundColor: resolvedTheme.bgScrolled,
-              color: resolvedTheme.textScrolled
+              color: resolvedTheme.textScrolled,
             }}
           >
             {navLinks.map((link, idx) => (
               <Link
                 key={idx}
+                ref={(el) => {
+                  if (el) menuItemRefsRef.current[idx] = el;
+                }}
                 href={link.href}
                 className="text-sm font-medium tracking-widest uppercase"
                 onClick={() => setIsMobileMenuOpen(false)}
@@ -233,12 +313,32 @@ export default function Header({
                 {link.label}
               </Link>
             ))}
+
+            <div
+              ref={(el) => {
+                if (el) menuItemRefsRef.current[navLinks.length] = el;
+              }}
+              className="mt-4 flex justify-center border-t border-current/10 pt-4"
+            >
+              {rightIcon || <LoginButton hoverTextColor={resolvedTheme.bgScrolled} />}
+            </div>
+
             {rightAction && (
-              <div className="mt-4 pt-4 border-t border-current/10">
+              <div
+                ref={(el) => {
+                  if (el) menuItemRefsRef.current[navLinks.length + 1] = el;
+                }}
+                className="mt-4 pt-4 border-t border-current/10"
+              >
                 {rightAction}
               </div>
             )}
-            <div className="mt-4 pt-4 border-t border-current/10 flex justify-center scale-90">
+            <div
+              ref={(el) => {
+                if (el) menuItemRefsRef.current[navLinks.length + 2] = el;
+              }}
+              className="mt-4 pt-4 border-t border-current/10 flex justify-center scale-90"
+            >
               <ThemeToggle />
             </div>
           </div>
