@@ -26,12 +26,13 @@ export async function middleware(req: NextRequest) {
   )
 
   // ✅ getUser() validates the JWT with Supabase servers — cannot be spoofed
-  const { data: { user }, error } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
 
   const { pathname } = req.nextUrl
 
   const isProtectedRoute =
     pathname.startsWith('/citizen') ||
+    pathname.startsWith('/lawyerside') ||
     pathname.startsWith('/portal') ||
     pathname.startsWith('/intake') ||
     pathname.startsWith('/analysis') ||
@@ -53,7 +54,7 @@ export async function middleware(req: NextRequest) {
       .single()
 
     const role = roleData?.role ?? 'citizen'
-    const dest = role === 'lawyer' ? '/portal/dashboard' : '/citizen/home'
+    const dest = role === 'lawyer' ? '/lawyerside/home' : '/citizen/home'
     return NextResponse.redirect(new URL(dest, req.url))
   }
 
@@ -68,13 +69,17 @@ export async function middleware(req: NextRequest) {
     const role = roleData?.role ?? 'citizen'
 
     // Citizen trying to access lawyer portal
-    if (pathname.startsWith('/portal') && role !== 'lawyer' && role !== 'admin') {
+    if (
+      (pathname.startsWith('/portal') || pathname.startsWith('/lawyerside')) &&
+      role !== 'lawyer' &&
+      role !== 'admin'
+    ) {
       return NextResponse.redirect(new URL('/citizen/home', req.url))
     }
 
     // Lawyer trying to access citizen area
     if (pathname.startsWith('/citizen') && role !== 'citizen' && role !== 'admin') {
-      return NextResponse.redirect(new URL('/portal/dashboard', req.url))
+      return NextResponse.redirect(new URL('/lawyerside/home', req.url))
     }
   }
 
