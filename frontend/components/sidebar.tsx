@@ -4,8 +4,13 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import gsap from 'gsap';
 import { Menu, Home, Compass, Gavel, Store, HelpCircle, Sun, Moon, LogOut, User, type LucideIcon } from 'lucide-react';
+import { useGSAP } from '@gsap/react';
 import { useTheme } from './themeprovider'; // Adjust path to your ThemeProvider
 import { signOut } from '@/lib/auth';
+
+if (typeof window !== "undefined") {
+  gsap.registerPlugin(useGSAP);
+}
 
 // ==========================================
 // 1. EXPORTED INTERFACES
@@ -85,9 +90,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   // Restore expanded state from localStorage on mount (client-side only)
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('sidebarExpanded');
-      if (stored === 'true') {
-        setIsExpanded(true);
+      const isMobile = window.innerWidth < 768;
+      // Force collapsed on mobile by default
+      if (isMobile) {
+        setIsExpanded(false);
+      } else {
+        const stored = localStorage.getItem('sidebarExpanded');
+        if (stored === 'true') {
+          setIsExpanded(true);
+        }
       }
     }
   }, []);
@@ -120,86 +131,73 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }, [navItems.length, showThemeToggle, showProfileButton, showHelpIcon]);
 
   // GSAP Entrance Animations
-  useLayoutEffect(() => {
+  useGSAP(() => {
     if (!mounted || !sidebarRef.current) return;
 
-    const ctx = gsap.context(() => {
-      const validRefs = iconRefs.current.filter(Boolean);
-      gsap.set(validRefs, { transformOrigin: '50% 50%' });
+    const validRefs = iconRefs.current.filter(Boolean);
+    gsap.set(validRefs, { transformOrigin: '50% 50%' });
 
-      const tl = gsap.timeline();
-      tl.fromTo(
-        sidebarRef.current,
-        { opacity: 0, y: 16 },
-        { opacity: 1, y: 0, duration: 0.45, ease: 'power2.out' }
-      ).fromTo(
-        validRefs,
-        { x: -20, opacity: 0 },
-        {
-          x: 0,
-          opacity: 1,
-          stagger: 0.08,
-          duration: 0.5,
-          ease: 'power3.out',
-          overwrite: 'auto',
-        },
-        '-=0.2'
-      );
-    }, sidebarRef);
+    const tl = gsap.timeline();
+    tl.fromTo(
+      sidebarRef.current,
+      { opacity: 0, y: 16 },
+      { opacity: 1, y: 0, duration: 0.45, ease: 'power2.out' }
+    ).fromTo(
+      validRefs,
+      { x: -20, opacity: 0 },
+      {
+        x: 0,
+        opacity: 1,
+        stagger: 0.08,
+        duration: 0.5,
+        ease: 'power3.out',
+        overwrite: 'auto',
+      },
+      '-=0.2'
+    );
+  }, { dependencies: [navItems.length, showThemeToggle, mounted], scope: sidebarRef });
 
-    return () => ctx.revert();
-  }, [navItems.length, showThemeToggle, mounted]);
-
-  // Setup reusable timeline for expanding/collapsing on desktop
-  useLayoutEffect(() => {
+  // GSAP Animations
+  useGSAP(() => {
     if (!mounted || !sidebarRef.current) return;
 
     const mm = gsap.matchMedia();
 
-    mm.add('(min-width: 768px)', () => {
+    mm.add("(min-width: 768px)", () => {
       const labels = labelRefs.current.filter(Boolean);
-
-      const tl = gsap.timeline({ paused: true });
-
-      tl.to(sidebarRef.current, {
-        width: 240,
+      
+      // Animate sidebar width
+      gsap.to(sidebarRef.current, {
+        width: isExpanded ? 240 : 90,
         duration: 0.45,
         ease: 'power3.inOut',
-      }, 0);
+        overwrite: 'auto',
+      });
 
-      tl.to(labels, {
-        opacity: 1,
-        maxWidth: 150,
-        marginLeft: 16,
+      // Animate labels
+      gsap.to(labels, {
+        opacity: isExpanded ? 1 : 0,
+        maxWidth: isExpanded ? 200 : 0,
+        marginLeft: isExpanded ? 16 : 0,
         duration: 0.35,
         ease: 'power2.inOut',
         stagger: 0.02,
-      }, 0);
-
-      expandTlRef.current = tl;
-
-      // Handle initial state if resized while expanded
-      if (isExpanded) {
-        tl.progress(1);
-      }
+        overwrite: 'auto',
+      });
     });
 
-    return () => {
-      mm.revert();
-      expandTlRef.current = null;
-    };
-  }, [mounted]); // Only run on mount or when theme makes it "mounted"
+    mm.add("(max-width: 767px)", () => {
+      // Animate mobile drawer position
+      gsap.to(sidebarRef.current, {
+        x: isExpanded ? 0 : '-100%',
+        duration: 0.4,
+        ease: 'power3.out',
+        overwrite: 'auto',
+      });
+    });
 
-  // Play or reverse the timeline based on state
-  useEffect(() => {
-    if (expandTlRef.current) {
-      if (isExpanded) {
-        expandTlRef.current.play();
-      } else {
-        expandTlRef.current.reverse();
-      }
-    }
-  }, [isExpanded]);
+    return () => mm.revert();
+  }, { dependencies: [isExpanded, mounted], scope: sidebarRef });
 
   // GSAP Hover Effects
   const handleMouseEnter = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -244,20 +242,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <aside
-      ref={sidebarRef}
-      style={dynamicStyles}
-      className={`
-        fixed bottom-0 w-full h-16 flex-row rounded-t-3xl overflow-x-auto shadow-xl z-50 py-2 px-4
-        md:relative md:h-full md:flex-col md:rounded-none md:shadow-none md:py-10 md:px-0 md:overflow-visible
-        flex justify-between items-center 
-        bg-[var(--sb-bg-light)] dark:bg-[var(--sb-bg-dark)] 
-        text-[var(--sb-text-light)] dark:text-[var(--sb-text-dark)] 
-        transition-colors duration-300 ease-in-out md:w-[90px]
-      `}
-    >
+    <>
+      {/* Mobile Menu Toggle Button - Only visible on mobile */}
+      <button
+        onClick={handleMenuToggle}
+        className="fixed top-4 left-4 z-[60] p-3 rounded-full bg-[var(--sb-bg-light)] dark:bg-[var(--sb-bg-dark)] text-[var(--sb-text-light)] dark:text-[var(--sb-text-dark)] shadow-lg md:hidden border border-[var(--sb-text-light)]/20 dark:border-[var(--sb-text-dark)]/20 active:scale-90 transition-transform duration-200"
+        style={dynamicStyles}
+      >
+        <Menu size={20} />
+      </button>
+
+      {/* Backdrop for mobile drawer */}
+      {isExpanded && (
+        <div 
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[45] md:hidden transition-opacity duration-300 pointer-events-auto"
+          onClick={() => setIsExpanded(false)}
+        />
+      )}
+
+      <aside
+        ref={sidebarRef}
+        style={dynamicStyles}
+        className={`
+          fixed top-0 left-0 h-full w-[240px] transition-colors duration-300 ease-in-out z-50
+          md:relative md:h-full md:flex-col md:rounded-none md:shadow-none md:py-10 md:px-0 md:overflow-visible
+          flex flex-col py-6 px-4
+          bg-[var(--sb-bg-light)] dark:bg-[var(--sb-bg-dark)] 
+          text-[var(--sb-text-light)] dark:text-[var(--sb-text-dark)] 
+        `}
+      >
       {/* Top / Main Navigation Items */}
-      <div className="flex md:flex-col items-center md:items-start gap-6 md:gap-8 w-full justify-around md:justify-start md:px-[25px]">
+      <div className="flex flex-col items-start gap-4 md:gap-8 w-full md:px-[25px]">
         {navItems.map((item, index) => {
           const Icon = item.icon;
           const isMenuTop = item.id === 'menu';
@@ -294,7 +309,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span
                 ref={(el) => { labelRefs.current[index] = el; }}
                 className={`
-                hidden md:block whitespace-nowrap overflow-hidden opacity-0 max-w-0 ml-0
+                md:block whitespace-nowrap overflow-hidden opacity-100 md:opacity-0 md:max-w-0 ml-4 md:ml-0
               `}
               >
                 {item.label}
@@ -305,7 +320,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Bottom Icons Container */}
-      <div className="hidden md:flex flex-col gap-6 mt-auto items-center md:items-start w-full md:px-[25px]">
+      <div className="flex flex-col gap-4 mt-auto items-start w-full md:px-[25px]">
 
         {/* Profile Button */}
         {showProfileButton && (
@@ -321,7 +336,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span
               ref={(el) => { labelRefs.current[navItems.length + (showProfileButton ? 0 : 0)] = el; }}
               className={`
-              hidden md:block whitespace-nowrap overflow-hidden opacity-0 max-w-0 ml-0
+              md:block whitespace-nowrap overflow-hidden opacity-100 md:opacity-0 md:max-w-0 ml-4 md:ml-0
             `}
             >
               Profile
@@ -353,7 +368,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span
               ref={(el) => { labelRefs.current[navItems.length + (showProfileButton ? 1 : 0)] = el; }}
               className={`
-              hidden md:block whitespace-nowrap overflow-hidden opacity-0 max-w-0 ml-0
+              md:block whitespace-nowrap overflow-hidden opacity-100 md:opacity-0 md:max-w-0 ml-4 md:ml-0
             `}
             >
               {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
@@ -374,7 +389,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span
             ref={(el) => { labelRefs.current[navItems.length + (showProfileButton ? 1 : 0) + (showThemeToggle ? 1 : 0)] = el; }}
             className={`
-              hidden md:block whitespace-nowrap overflow-hidden opacity-0 max-w-0 ml-0
+              md:block whitespace-nowrap overflow-hidden opacity-100 md:opacity-0 md:max-w-0 ml-4 md:ml-0
             `}
           >
             Logout
@@ -395,7 +410,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span
               ref={(el) => { labelRefs.current[navItems.length + (showProfileButton ? 1 : 0) + (showThemeToggle ? 1 : 0) + 1] = el; }}
               className={`
-              hidden md:block whitespace-nowrap overflow-hidden opacity-0 max-w-0 ml-0
+              md:block whitespace-nowrap overflow-hidden opacity-100 md:opacity-0 md:max-w-0 ml-4 md:ml-0
             `}
             >
               Help & Support
@@ -404,5 +419,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
     </aside>
+    </>
   );
 };
