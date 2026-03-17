@@ -527,7 +527,7 @@ export default function AnimatedAuth({
             ) : (
               <>
                 <img
-                  src="/Googe_icon.svg"
+                  src="/google_icon.svg"
                   alt="Google logo"
                   className="h-5 w-5"
                 />
@@ -666,7 +666,7 @@ export default function AnimatedAuth({
             ) : (
               <>
                 <img
-                  src="/Googe_icon.svg"
+                  src="/google_icon.svg"
                   alt="Google logo"
                   className="h-4 w-4"
                 />
