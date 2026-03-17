@@ -1,5 +1,6 @@
 'use client';
 import React, { useRef, useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Sidebar } from '../../../../components/sidebar';
 import type { NavItem } from '../../../../components/sidebar';
 import gsap from 'gsap';
@@ -17,6 +18,7 @@ const LAWYER_NAV_ITEMS: NavItem[] = [
 ];
 
 export default function LawyerLegalRightsExplorer() {
+  const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const searchBarRef = useRef<HTMLDivElement>(null);
@@ -26,6 +28,10 @@ export default function LawyerLegalRightsExplorer() {
   const featuredCardRef = useRef<HTMLDivElement>(null);
 
   const [activeLang, setActiveLang] = useState('ENGLISH');
+
+  const handleProfileClick = () => {
+    router.push('/lawyerside/profile');
+  };
   const [featuredCase, setFeaturedCase] = useState<Database['public']['Tables']['cases']['Row'] | null>(null);
   const [loadingFeatured, setLoadingFeatured] = useState(true);
 
@@ -175,7 +181,7 @@ export default function LawyerLegalRightsExplorer() {
     <div className="flex bg-gray-50 dark:bg-[#0f1e3f] font-sans h-screen overflow-hidden text-gray-900 dark:text-white transition-colors duration-300" ref={containerRef}>
       {/* Sidebar Navigation */}
       <div className="shrink-0 h-screen z-50 md:sticky md:top-0 shadow-[4px_0_24px_rgba(0,0,0,0.05)] dark:shadow-none bg-white dark:bg-[#0a152e]">
-        <Sidebar navItems={LAWYER_NAV_ITEMS} />
+        <Sidebar navItems={LAWYER_NAV_ITEMS} showProfileButton={true} onProfileClick={handleProfileClick} />
       </div>
 
       {/* Main Content Area */}
