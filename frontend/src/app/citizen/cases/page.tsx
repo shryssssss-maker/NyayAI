@@ -426,24 +426,17 @@ export default function CaseHistory() {
       </div>
       <div className="flex-1 max-w-[1200px] mx-auto p-6 md:p-8 text-gray-900 dark:text-white flex flex-col pb-24 md:pb-8">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-medium tracking-wide text-[#997953] dark:text-[#cdaa80] mb-2 font-serif">
-            Cases
-          </h1>
-          <p className="text-gray-600 dark:text-white/70 text-[15px] font-sans">
-            Manage and track the progress of your legal cases and match with advocates.
-          </p>
-        </div>
-
-        {/* Top Header/Nav Area */}
-        <div className="cases-top-nav relative z-[120] flex items-center justify-between border-b border-[#d8c1a1] dark:border-[#213a56] pb-2 mb-6 shrink-0">
-          <nav className="flex gap-6 text-sm">
-            <button className="text-[#cdaa80] border-b-2 border-[#cdaa80] pb-2 font-medium">
+        <div className="mb-6 relative z-[120] flex items-start justify-between gap-4 shrink-0">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-3xl font-medium tracking-wide text-[#997953] dark:text-[#cdaa80] mb-2 font-serif">
               Cases
-            </button>
-          </nav>
+            </h1>
+            <p className="text-gray-600 dark:text-white/70 text-[15px] font-sans">
+              Manage and track the progress of your legal cases and match with advocates.
+            </p>
+          </div>
 
-          <div ref={notificationRef} className="relative z-[130]">
+          <div ref={notificationRef} className="relative z-[130] shrink-0 pt-1">
             <button
               title="Notifications"
               onClick={async () => {
