@@ -3,7 +3,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import gsap from 'gsap';
-import { Menu, Home, Phone, Edit3, User, MapPin, Mail, HelpCircle, Sun, Moon } from 'lucide-react';
+import { Menu, Home, Compass, Gavel, Store, HelpCircle, Sun, Moon } from 'lucide-react';
 import { useTheme } from './themeprovider'; // Adjust path to your ThemeProvider
 
 // ==========================================
@@ -33,6 +33,7 @@ export interface SidebarProps {
 
   /** Configuration for the bottom/end of the sidebar */
   showThemeToggle?: boolean;
+  showHelpIcon?: boolean;
   helpIcon?: React.ElementType;
   onHelpClick?: () => void;
 
@@ -57,11 +58,9 @@ const DEFAULT_THEME: SidebarThemeColors = {
 const DEFAULT_NAV_ITEMS: NavItem[] = [
   { id: 'menu', icon: Menu, label: 'Menu' },
   { id: 'home', icon: Home, label: 'Home', href: '/citizen/home' },
-  { id: 'phone', icon: Phone, label: 'Contact', href: '/citizen/cases' },
-  { id: 'edit', icon: Edit3, label: 'Cases', href: '/citizen/cases' },
-  { id: 'user', icon: User, label: 'Profile', href: '/citizen/settings' },
-  { id: 'location', icon: MapPin, label: 'Marketplace', href: '/citizen/market_place' },
-  { id: 'mail', icon: Mail, label: 'Messages', href: '/citizen/home' },
+  { id: 'explore', icon: Compass, label: 'Explore', href: '/citizen/explore' },
+  { id: 'cases', icon: Gavel, label: 'Cases', href: '/citizen/cases' },
+  { id: 'marketplace', icon: Store, label: 'Marketplace', href: '/citizen/marketplace' },
 ];
 
 // ==========================================
@@ -71,6 +70,7 @@ const DEFAULT_NAV_ITEMS: NavItem[] = [
 export const Sidebar: React.FC<SidebarProps> = ({
   navItems = DEFAULT_NAV_ITEMS,
   showThemeToggle = true,
+  showHelpIcon = false,
   helpIcon: HelpIcon = HelpCircle,
   onHelpClick,
   themeColors = {},
@@ -99,9 +99,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   } as React.CSSProperties;
 
   useEffect(() => {
-    iconRefs.current.length = navItems.length + 2;
-    labelRefs.current.length = navItems.length + 2;
-  }, [navItems.length]);
+    const bottomActionsCount = (showThemeToggle ? 1 : 0) + (showHelpIcon ? 1 : 0);
+    iconRefs.current.length = navItems.length + bottomActionsCount;
+    labelRefs.current.length = navItems.length + bottomActionsCount;
+  }, [navItems.length, showThemeToggle, showHelpIcon]);
 
   // GSAP Entrance Animations
   useLayoutEffect(() => {
@@ -309,24 +310,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         {/* Help Icon */}
-        <div
-          ref={(el) => { iconRefs.current[navItems.length + 1] = el; }}
-          onClick={onHelpClick}
-          title="Help & Support"
-          className="cursor-pointer p-2 rounded-xl hover:bg-[var(--sb-hover-light)] dark:hover:bg-[var(--sb-hover-dark)] transition-colors duration-300 flex items-center md:justify-start md:overflow-hidden md:w-full"
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-        >
-          <HelpIcon size={24} strokeWidth={2.25} className="shrink-0" />
-          <span
-            ref={(el) => { labelRefs.current[navItems.length + 1] = el; }}
-            className={`
-            hidden md:block whitespace-nowrap overflow-hidden opacity-0 max-w-0 ml-0
-          `}
+        {showHelpIcon && (
+          <div
+            ref={(el) => { iconRefs.current[navItems.length + (showThemeToggle ? 1 : 0)] = el; }}
+            onClick={onHelpClick}
+            title="Help & Support"
+            className="cursor-pointer p-2 rounded-xl hover:bg-[var(--sb-hover-light)] dark:hover:bg-[var(--sb-hover-dark)] transition-colors duration-300 flex items-center md:justify-start md:overflow-hidden md:w-full"
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
           >
-            Help & Support
-          </span>
-        </div>
+            <HelpIcon size={24} strokeWidth={2.25} className="shrink-0" />
+            <span
+              ref={(el) => { labelRefs.current[navItems.length + (showThemeToggle ? 1 : 0)] = el; }}
+              className={`
+              hidden md:block whitespace-nowrap overflow-hidden opacity-0 max-w-0 ml-0
+            `}
+            >
+              Help & Support
+            </span>
+          </div>
+        )}
       </div>
     </aside>
   );
