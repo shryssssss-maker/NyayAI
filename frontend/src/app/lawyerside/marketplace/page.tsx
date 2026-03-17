@@ -7,14 +7,10 @@ import type { NavItem } from '../../../../components/sidebar';
 import { LiquidSlider } from '../../../../components/LiquidSlider';
 import { supabase } from '@/lib/supabase/client';
 import type { Database } from '@/types/supabase';
-<<<<<<< HEAD
 import { Menu, Home, Compass, Store, Gavel } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { acceptOffer } from '@/lib/db/pipeline';
 import * as Dialog from '@radix-ui/react-dialog';
-=======
-import { Menu, Home, Compass, Store, Briefcase } from 'lucide-react';
->>>>>>> 7195c891972f31040bca19659ebe2ea7585b6644
 
 type CaseRow = Database['public']['Tables']['cases']['Row'];
 type LawyerProfile = Database['public']['Tables']['lawyer_profiles']['Row'];
@@ -53,11 +49,7 @@ const LAWYER_NAV_ITEMS: NavItem[] = [
   { id: 'home', icon: Home, label: 'Home', href: '/lawyerside/home' },
   { id: 'explorer', icon: Compass, label: 'Explorer', href: '/lawyerside/explorer' },
   { id: 'marketplace', icon: Store, label: 'Marketplace', href: '/lawyerside/marketplace' },
-<<<<<<< HEAD
   { id: 'my-cases', icon: Gavel, label: 'My Cases', href: '/lawyerside/my-cases' },
-=======
-  { id: 'yourcases', icon: Briefcase, label: 'Your Cases', href: '/lawyerside/yourcases' },
->>>>>>> 7195c891972f31040bca19659ebe2ea7585b6644
 ];
 
 const DOMAIN_LABELS: Record<string, string> = {
