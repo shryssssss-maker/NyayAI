@@ -27,9 +27,11 @@ export default function LawyerHome() {
   const domainsHeaderRef = useRef<HTMLHeadingElement>(null);
   const cardsRef = useRef<HTMLDivElement>(null);
   const iconsRef = useRef<HTMLDivElement>(null);
+  const inputBarRef = useRef<HTMLDivElement>(null);
 
   const [input, setInput] = useState('');
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [activeLang, setActiveLang] = useState('ENGLISH');
 
   const {
     isRecording,
@@ -39,8 +41,6 @@ export default function LawyerHome() {
     stopRecording,
     resetRecording
   } = useVoiceRecorder();
-
-  const router = useRouter();
 
   useEffect(() => {
     if (recorderError) {
@@ -357,6 +357,8 @@ export default function LawyerHome() {
                 ))}
               </div>
             </div>
+          </div>
+        </div>
 
         {/* Fixed Input Area at Bottom */}
         <div ref={inputBarRef} className="absolute bottom-0 left-0 right-0 p-6 md:p-10 bg-gradient-to-t from-gray-50 via-gray-50 to-transparent dark:from-[#0f1e3f] dark:via-[#0f1e3f] dark:to-transparent z-20">
