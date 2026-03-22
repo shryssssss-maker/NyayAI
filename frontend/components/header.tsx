@@ -2,6 +2,7 @@
 
 import React, { useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
@@ -49,11 +50,9 @@ const DEFAULT_THEME: HeaderThemeColors = {
 };
 
 const DEFAULT_NAV_ITEMS: NavItem[] = [
-  { label: "HOME", href: "/" },
-  { label: "COLLECTION", href: "/collection" },
-  { label: "ARTISTS", href: "/artists" },
-  { label: "EVENTS", href: "/events" },
-  { label: "VISIT", href: "/visit" },
+  { label: "Home", href: "/" },
+  { label: "About Us", href: "/about" },
+  { label: "Contact", href: "/contact" },
 ];
 
 
@@ -239,12 +238,39 @@ export default function Header({
 
       <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
 
-        {/* Left Side: Theme Toggle & Text Logo */}
+        {/* Left Side: Theme Toggle & Text Logo with Balance Logo */}
         <div className="flex items-center gap-4">
           <div className="hidden md:block scale-75 origin-left">
             <ThemeToggle />
           </div>
-          <Link href="/" className="inline-block group">
+          <Link href="/" className="group flex items-center gap-2 whitespace-nowrap">
+            {theme === "dark" ? (
+              <span
+                aria-hidden="true"
+                className="block group-hover:opacity-70 transition-opacity flex-shrink-0"
+                style={{
+                  width: 40,
+                  height: 40,
+                  backgroundColor: "currentColor",
+                  WebkitMaskImage: "url('/balance_512.png')",
+                  maskImage: "url('/balance_512.png')",
+                  WebkitMaskRepeat: "no-repeat",
+                  maskRepeat: "no-repeat",
+                  WebkitMaskPosition: "center",
+                  maskPosition: "center",
+                  WebkitMaskSize: "contain",
+                  maskSize: "contain",
+                }}
+              />
+            ) : (
+              <Image
+                src="/balance_512.png"
+                alt="NyayaAI Logo"
+                width={40}
+                height={40}
+                className="group-hover:opacity-70 transition-opacity flex-shrink-0"
+              />
+            )}
             <span className="font-serif text-3xl font-medium tracking-tight group-hover:opacity-70 transition-opacity">
               {logoText}
             </span>
@@ -318,8 +344,11 @@ export default function Header({
               ref={(el) => {
                 if (el) menuItemRefsRef.current[navLinks.length] = el;
               }}
-              className="mt-4 flex justify-center border-t border-current/10 pt-4"
+              className="mt-4 flex items-center justify-center gap-4 border-t border-current/10 pt-4"
             >
+              <div className="scale-90">
+                <ThemeToggle />
+              </div>
               {rightIcon || <LoginButton hoverTextColor={resolvedTheme.bgScrolled} />}
             </div>
 
@@ -333,14 +362,6 @@ export default function Header({
                 {rightAction}
               </div>
             )}
-            <div
-              ref={(el) => {
-                if (el) menuItemRefsRef.current[navLinks.length + 2] = el;
-              }}
-              className="mt-4 pt-4 border-t border-current/10 flex justify-center scale-90"
-            >
-              <ThemeToggle />
-            </div>
           </div>
         )}
       </div>

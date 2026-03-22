@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState,} from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, } from 'react';
+import { useRouter } from 'next/navigation';
 import gsap from 'gsap';
 import { useGSAP } from '@gsap/react';
 import { Sidebar } from '../../../../components/sidebar';
@@ -10,12 +11,16 @@ import { getCitizenCases } from '@/lib/db/cases';
 import { getNotifications, markAllNotificationsRead, markNotificationRead, subscribeToNotifications } from '@/lib/db/notifications';
 import type { Database } from '@/types/supabase';
 import * as Dialog from '@radix-ui/react-dialog';
-import { acceptOffer, getCasePipelineForCitizen } from '@/lib/db/pipeline';
+import { acceptOffer, getCasePipelineForCitizen, getPendingOffersCount } from '@/lib/db/pipeline';
 import { toast } from 'sonner';
 import NextLink from 'next/link';
+import { AnalysisModal } from '../../../components/AnalysisModal';
+import { getBackendUrl } from '@/lib/utils/backendUrl'
+import { toDomainLabel } from '@/lib/utils/domain';
 
 type CaseRow = Database['public']['Tables']['cases']['Row'];
 type NotificationRow = Database['public']['Tables']['notifications']['Row'];
+type CasePipelineRow = Database['public']['Tables']['case_pipeline']['Row'];
 
 function formatUiStatus(caseRow: CaseRow): string {
   if (caseRow.status === 'completed') return 'Case Completed'
@@ -27,7 +32,49 @@ function formatUiStatus(caseRow: CaseRow): string {
   return (caseRow.status ?? 'Submitted').replace(/_/g, ' ')
 }
 
+function toObject(value: unknown): Record<string, any> | null {
+  if (!value) return null
+  if (typeof value === 'object') return value as Record<string, any>
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return typeof parsed === 'object' && parsed ? parsed as Record<string, any> : null
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+function buildFallbackAnalysisFromCase(caseRow: CaseRow | null): Record<string, any> | null {
+  if (!caseRow) return null
+
+  const structuredFacts = toObject((caseRow as any).confirmed_facts) ?? toObject((caseRow as any).case_brief)
+  const legalMapping = toObject((caseRow as any).applicable_laws)
+  const actionPlan = toObject((caseRow as any).recommended_strategy)
+  const evidence = toObject((caseRow as any).evidence_inventory)
+
+  if (!structuredFacts && !legalMapping && !actionPlan && !evidence) {
+    return null
+  }
+
+  const mergedActionPlan = {
+    ...(actionPlan ?? {}),
+    evidence_checklist: (actionPlan as any)?.evidence_checklist ?? evidence?.items ?? evidence,
+  }
+
+  return {
+    case_id: caseRow.id,
+    structured_facts: structuredFacts ?? {},
+    legal_mapping: legalMapping ?? {},
+    action_plan: mergedActionPlan,
+    generated_documents: {},
+    reasoning_trace: {},
+  }
+}
+
 export default function CaseHistory() {
+  const router = useRouter();
   const pageRef = useRef<HTMLDivElement | null>(null);
   const cardsWrapperRef = useRef<HTMLDivElement | null>(null);
   const searchContainerRef = useRef<HTMLDivElement | null>(null);
@@ -45,22 +92,40 @@ export default function CaseHistory() {
   const [selectedCase, setSelectedCase] = useState<CaseRow | null>(null)
   const [offersLoading, setOffersLoading] = useState(false)
   const [offersError, setOffersError] = useState<string | null>(null)
-  const [offers, setOffers] = useState<Database['public']['Tables']['case_pipeline']['Row'][]>([])
+  const [offers, setOffers] = useState<CasePipelineRow[]>([])
   const [acceptingOfferId, setAcceptingOfferId] = useState<string | null>(null)
+  const [analysisLoading, setAnalysisLoading] = useState(false)
+  const [caseAnalysis, setCaseAnalysis] = useState<any>(null)
+  const [analysisError, setAnalysisError] = useState<string | null>(null)
   const [recentlyMatchedIds, setRecentlyMatchedIds] = useState<Set<string>>(new Set())
   const [notificationOpen, setNotificationOpen] = useState(false)
   const [notificationLoading, setNotificationLoading] = useState(false)
   const [notifications, setNotifications] = useState<NotificationRow[]>([])
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
+  const [offerCounts, setOfferCounts] = useState<Record<string, number>>({})
   const notificationRef = useRef<HTMLDivElement | null>(null)
 
-  const onlyLawyerAcceptance = (rows: NotificationRow[]) =>
+  const offerLifecycleNotifications = (rows: NotificationRow[]) =>
     rows.filter((row) => {
-      if (row.type === 'offer_accepted') return true
+      if (row.type === 'offer_received' || row.type === 'offer_accepted') return true
       const title = (row.title ?? '').toLowerCase()
       const body = (row.body ?? '').toLowerCase()
-      return title.includes('accepted') || body.includes('accepted')
+      return title.includes('offer') || body.includes('offer') || title.includes('accepted') || body.includes('accepted')
     })
+
+  const getNotificationTitle = (item: NotificationRow) => {
+    if (item.title) return item.title
+    if (item.type === 'offer_received') return 'New lawyer offer received'
+    if (item.type === 'offer_accepted') return 'Your offer acceptance is confirmed'
+    return 'Case update'
+  }
+
+  const getNotificationBody = (item: NotificationRow) => {
+    if (item.body) return item.body
+    if (item.type === 'offer_received') return 'A lawyer has sent a new offer. Open to review and accept.'
+    if (item.type === 'offer_accepted') return 'Your selected lawyer has been notified. You can continue from case details.'
+    return 'Tap to open your case updates.'
+  }
 
   const formatRelativeTime = (iso: string | null) => {
     if (!iso) return 'Just now'
@@ -97,6 +162,21 @@ export default function CaseHistory() {
         setDbCases([])
       } else {
         setDbCases(data ?? [])
+        if (data && data.length > 0) {
+          const caseIds = data.map(c => c.id)
+          const { data: counts } = await getPendingOffersCount(caseIds)
+          if (counts) setOfferCounts(counts)
+        }
+      }
+
+      // Check URL for caseId to auto-open
+      const urlParams = new URLSearchParams(window.location.search);
+      const caseIdFromUrl = urlParams.get('caseId');
+      if (caseIdFromUrl) {
+        // Wait a small bit for state to settle or find in current dbCases
+        setTimeout(() => {
+          void openCaseDetails(caseIdFromUrl);
+        }, 500);
       }
     }
     void load()
@@ -145,12 +225,49 @@ export default function CaseHistory() {
       )
       .subscribe();
 
+    // ── Real-time pipeline subscription ──────────────────
+    const pipelineChannel = supabase
+      .channel('citizen-pipeline-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'case_pipeline',
+        },
+        async (payload) => {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+
+          // If a new offer is inserted or a status changes, refresh the counts for the user's cases
+          const { data: cases } = await getCitizenCases(user.id);
+          if (cases && cases.length > 0) {
+            const caseIds = cases.map(c => c.id);
+            const { data: counts } = await getPendingOffersCount(caseIds);
+            if (counts) setOfferCounts(counts);
+
+            // If a new offer was inserted, show a toast
+            if (payload.eventType === 'INSERT' && (payload.new as any).stage === 'offered') {
+              const matchedCase = cases.find(c => c.id === (payload.new as any).case_id);
+              if (matchedCase) {
+                toast.info(`New offer received for: ${matchedCase.title}`, {
+                  description: 'Click on the case to review the lawyer\'s proposal.',
+                  duration: 6000,
+                });
+              }
+            }
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       void supabase.removeChannel(channel);
+      void supabase.removeChannel(pipelineChannel);
     };
   }, [])
 
-  const loadAcceptanceNotifications = async () => {
+  const loadOfferNotifications = useCallback(async () => {
     const { data: authData, error: authError } = await supabase.auth.getUser()
     if (authError || !authData.user) return
 
@@ -159,20 +276,20 @@ export default function CaseHistory() {
     setNotificationLoading(false)
     if (error) return
 
-    const filtered = onlyLawyerAcceptance(data ?? [])
+    const filtered = offerLifecycleNotifications(data ?? [])
     setNotifications(filtered)
     setUnreadNotificationCount(filtered.filter((row) => !row.is_read).length)
-  }
+  }, [])
 
   useEffect(() => {
     let channel: ReturnType<typeof subscribeToNotifications> | null = null
 
     const init = async () => {
-      await loadAcceptanceNotifications()
+      await loadOfferNotifications()
       const { data: authData, error: authError } = await supabase.auth.getUser()
       if (authError || !authData.user) return
       channel = subscribeToNotifications(authData.user.id, async () => {
-        await loadAcceptanceNotifications()
+        await loadOfferNotifications()
       })
     }
 
@@ -183,13 +300,42 @@ export default function CaseHistory() {
         channel.unsubscribe()
       }
     }
-  }, [])
+  }, [loadOfferNotifications])
+
+  useEffect(() => {
+    if (!selectedCase) return
+
+    const channel = supabase
+      .channel(`citizen-case-offers:${selectedCase.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'case_pipeline',
+        filter: `case_id=eq.${selectedCase.id}`,
+      }, async () => {
+        const { data: pipelineRows, error: pipelineErr } = await getCasePipelineForCitizen(selectedCase.id)
+        if (pipelineErr) {
+          setOffersError(pipelineErr.message)
+          return
+        }
+        const rows = (pipelineRows ?? []) as CasePipelineRow[]
+        setOffers(rows.filter((r) => r.stage === 'offered'))
+      })
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [selectedCase])
 
   const openCaseDetails = async (caseId: string) => {
     const caseRow = dbCases.find((c) => c.id === caseId) ?? null
     setSelectedCase(caseRow)
     setOffersError(null)
     setOffers([])
+    setAnalysisLoading(true)
+    setCaseAnalysis(null)
+    setAnalysisError(null)
     if (!caseRow) return
 
     // Always fetch the latest case row for the modal so status + AI draft fields are synced.
@@ -202,11 +348,44 @@ export default function CaseHistory() {
       setSelectedCase(freshCase as CaseRow)
     }
 
+    // Fetch case analysis from backend API using case_id
+    try {
+      const BACKEND_URL = getBackendUrl()
+      const response = await fetch(`${BACKEND_URL}/cases/${caseId}`).catch(e => {
+        console.warn('Network error fetching analysis:', e)
+        return null
+      })
+      
+      if (response && response.ok) {
+        const data = await response.json()
+        setCaseAnalysis(data.analysis || null)
+      } else {
+        // Fetch failed or status not 2xx, try local fallback
+        const fallbackAnalysis = buildFallbackAnalysisFromCase((freshCase as CaseRow) ?? caseRow)
+        if (fallbackAnalysis) {
+          setCaseAnalysis(fallbackAnalysis)
+        } else if (response && response.status === 404) {
+          setAnalysisError('Full analysis not yet synced to AI service. Try opening in chat first.')
+        } else if (!response) {
+          setAnalysisError('The AI analysis service is unreachable. Showing partial case data.')
+        } else {
+          setAnalysisError('Could not load full analysis right now.')
+        }
+      }
+    } catch (err) {
+      console.error('Failed to process case analysis:', err)
+      const fallbackAnalysis = buildFallbackAnalysisFromCase((freshCase as CaseRow) ?? caseRow)
+      if (fallbackAnalysis) setCaseAnalysis(fallbackAnalysis)
+      else setAnalysisError('Could not connect to analysis service.')
+    } finally {
+      setAnalysisLoading(false)
+    }
+
     setOffersLoading(true)
     const { data: pipelineRows, error: pipelineErr } = await getCasePipelineForCitizen(caseRow.id)
     if (pipelineErr) setOffersError(pipelineErr.message)
     const rows = (pipelineRows ?? []) as Database['public']['Tables']['case_pipeline']['Row'][]
-    setOffers(rows.filter((r) => r.stage === 'offered'))
+    setOffers(rows.filter((r) => r.stage === 'offered' || r.stage === 'accepted'))
     setOffersLoading(false)
   }
 
@@ -214,31 +393,52 @@ export default function CaseHistory() {
     if (!selectedCase) return
     setOffersError(null)
     setAcceptingOfferId(pipelineId)
-    const { data: authData, error: authError } = await supabase.auth.getUser()
-    if (authError || !authData.user) {
-      setOffersError('Please log in to accept offers.')
-      setAcceptingOfferId(null)
-      return
+
+    const getOfferErrorMessage = (error: unknown) => {
+      const message = error instanceof Error ? error.message : 'Failed to accept offer.'
+      if (/failed to fetch/i.test(message)) {
+        return 'Unable to reach the case service right now. Please check your connection and try again.'
+      }
+      return message
     }
 
-    const { error } = await acceptOffer(pipelineId, selectedCase.id)
-    if (error) {
-      setOffersError(error.message)
+    try {
+      const { data: authData, error: authError } = await supabase.auth.getUser()
+      if (authError || !authData.user) {
+        setOffersError('Please log in to accept offers.')
+        return
+      }
+
+      const { error } = await acceptOffer(pipelineId, selectedCase.id)
+      if (error) {
+        setOffersError(getOfferErrorMessage(error))
+        return
+      }
+
+      // Refresh offers + the case list so the status updates in UI
+      const { data: pipelineRows, error: pipelineErr } = await getCasePipelineForCitizen(selectedCase.id)
+      if (pipelineErr) setOffersError(pipelineErr.message)
+      const rows = (pipelineRows ?? []) as Database['public']['Tables']['case_pipeline']['Row'][]
+      setOffers(rows.filter((r) => r.stage === 'offered' || r.stage === 'accepted'))
+
+      const { data: casesData, error: casesErr } = await getCitizenCases(authData.user.id)
+      if (casesErr) setDbError(casesErr.message)
+      else setDbCases(casesData ?? [])
+
+      // Refresh offer counts after accepting
+      const { data: authDataRefresh } = await supabase.auth.getUser()
+      if (authDataRefresh?.user) {
+        const { data: cases } = await getCitizenCases(authDataRefresh.user.id)
+        if (cases) {
+          const { data: counts } = await getPendingOffersCount(cases.map(c => c.id))
+          if (counts) setOfferCounts(counts)
+        }
+      }
+    } catch (error) {
+      setOffersError(getOfferErrorMessage(error))
+    } finally {
       setAcceptingOfferId(null)
-      return
     }
-
-    // Refresh offers + the case list so the status updates in UI
-    const { data: pipelineRows, error: pipelineErr } = await getCasePipelineForCitizen(selectedCase.id)
-    if (pipelineErr) setOffersError(pipelineErr.message)
-    const rows = (pipelineRows ?? []) as Database['public']['Tables']['case_pipeline']['Row'][]
-    setOffers(rows.filter((r) => r.stage === 'offered'))
-
-    const { data: casesData, error: casesErr } = await getCitizenCases(authData.user.id)
-    if (casesErr) setDbError(casesErr.message)
-    else setDbCases(casesData ?? [])
-
-    setAcceptingOfferId(null)
   }
 
   const handleMarkAllRead = async () => {
@@ -258,9 +458,12 @@ export default function CaseHistory() {
 
     const caseId = extractCaseId(notification)
     if (caseId) {
+      // If we are already on this page, just open the modal.
+      // If we are elsewhere, the window.location change in home/page.tsx handles it.
       await openCaseDetails(caseId)
+    } else {
+      setNotificationOpen(false)
     }
-    setNotificationOpen(false)
   }
 
   const sortOptions: Array<{ label: string; value: typeof sortOption }> = [
@@ -275,7 +478,7 @@ export default function CaseHistory() {
       id: c.id,
       title: c.title ?? 'Untitled Case',
       description: c.incident_description ?? 'No description provided.',
-      domain: (c.domain ?? 'other').replace(/_/g, ' '),
+      domain: toDomainLabel(c.domain ?? 'other'),
       date: c.created_at ? new Date(c.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Unknown',
       status: formatUiStatus(c),
     }))
@@ -352,12 +555,12 @@ export default function CaseHistory() {
         { opacity: 0, y: -30 },
         { opacity: 1, y: 0, duration: 0.8, ease: 'power3.out' }
       )
-      .fromTo(
-        '.cases-search-sort',
-        { opacity: 0, y: -20, scale: 0.95 },
-        { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: 'power3.out' },
-        '-=0.4'
-      );
+        .fromTo(
+          '.cases-search-sort',
+          { opacity: 0, y: -20, scale: 0.95 },
+          { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: 'power3.out' },
+          '-=0.4'
+        );
     },
     { scope: pageRef }
   );
@@ -369,12 +572,12 @@ export default function CaseHistory() {
       gsap.fromTo(
         '.case-card',
         { opacity: 0, y: 30 },
-        { 
-          opacity: 1, 
-          y: 0, 
-          stagger: 0.08, 
-          duration: 0.6, 
-          ease: 'back.out(1.2)', 
+        {
+          opacity: 1,
+          y: 0,
+          stagger: 0.08,
+          duration: 0.6,
+          ease: 'back.out(1.2)',
           clearProps: 'all'
         }
       );
@@ -418,26 +621,32 @@ export default function CaseHistory() {
       ref={pageRef}
       className="flex min-h-screen bg-gray-50 dark:bg-[#0f1e3f] transition-colors duration-300"
     >
-      <div className="md:sticky md:top-0 md:h-screen shrink-0 z-50">
+      <div className="hidden md:block md:sticky md:top-0 md:h-screen shrink-0 z-[1000]">
         <Sidebar />
       </div>
-      <div className="flex-1 max-w-[1200px] mx-auto p-6 md:p-8 text-gray-900 dark:text-white flex flex-col pb-24 md:pb-8">
-        {/* Top Header/Nav Area */}
-        <div className="cases-top-nav relative z-[120] flex items-center justify-between border-b border-[#d8c1a1] dark:border-[#213a56] pb-2 mb-6 shrink-0">
-          <nav className="flex gap-6 text-sm">
-            <button className="text-[#cdaa80] border-b-2 border-[#cdaa80] pb-2 font-medium">
+      <div className="md:hidden relative z-[1000]">
+        <Sidebar />
+      </div>
+      <div className="flex-1 max-w-[1200px] mx-auto pt-20 px-6 pb-24 md:p-8 text-gray-900 dark:text-white flex flex-col md:pb-8">
+        {/* Header */}
+        <div className="mb-6 relative z-[120] flex items-start justify-between gap-4 shrink-0">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-3xl font-medium tracking-wide text-[#997953] dark:text-[#cdaa80] mb-2 font-serif">
               Cases
-            </button>
-          </nav>
+            </h1>
+            <p className="text-gray-600 dark:text-white/70 text-[15px] font-sans">
+              Manage and track the progress of your legal cases and match with advocates.
+            </p>
+          </div>
 
-          <div ref={notificationRef} className="relative z-[130]">
+          <div ref={notificationRef} className="relative z-[130] shrink-0 pt-1">
             <button
               title="Notifications"
               onClick={async () => {
                 const next = !notificationOpen
                 setNotificationOpen(next)
                 if (next) {
-                  await loadAcceptanceNotifications()
+                  await loadOfferNotifications()
                 }
               }}
               className="relative flex items-center justify-center w-10 h-10 rounded-full border border-[#d8c1a1] dark:border-white/10 bg-white dark:bg-[#12284f]/80 text-[#443831] dark:text-[#cdaa80] hover:bg-[#f9f2e8] dark:hover:bg-[#213a56] transition-all duration-300"
@@ -457,7 +666,7 @@ export default function CaseHistory() {
                 <div className="px-4 py-3 border-b border-[#e8d7c1] dark:border-[#cdaa80]/20 flex items-center justify-between">
                   <div>
                     <p className="text-[12px] uppercase tracking-[1.5px] text-[#7b5f40] dark:text-[#cdaa80] font-semibold">Notifications</p>
-                    <p className="text-[12px] text-[#6b5a49] dark:text-white/70">Lawyer acceptance updates</p>
+                    <p className="text-[12px] text-[#6b5a49] dark:text-white/70">Offer and acceptance updates</p>
                   </div>
                   <button
                     onClick={handleMarkAllRead}
@@ -471,29 +680,39 @@ export default function CaseHistory() {
                   {notificationLoading ? (
                     <div className="px-4 py-5 text-sm text-[#6b5a49] dark:text-white/70">Loading notifications...</div>
                   ) : notifications.length === 0 ? (
-                    <div className="px-4 py-5 text-sm text-[#6b5a49] dark:text-white/70">No lawyer acceptance notifications yet.</div>
+                    <div className="px-4 py-5 text-sm text-[#6b5a49] dark:text-white/70">No offer notifications yet.</div>
                   ) : (
-                    notifications.map((item) => (
-                      <button
-                        key={item.id}
-                        onClick={() => { void handleNotificationClick(item) }}
-                        className={`w-full text-left block px-4 py-3 border-b border-[#efe1ce] dark:border-[#cdaa80]/10 hover:bg-[#f9f2e8] dark:hover:bg-[#1a3358] transition-colors ${
-                          item.is_read ? 'opacity-80' : ''
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <p className="text-[13px] font-semibold text-[#3f3124] dark:text-white/90 leading-snug">
-                            {item.title || 'A lawyer accepted your request'}
+                    notifications.map((item) => {
+                      const isOffer = item.type === 'offer_received';
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => { void handleNotificationClick(item) }}
+                          className={`w-full text-left block px-4 py-3 border-b border-[#efe1ce] dark:border-[#cdaa80]/10 hover:bg-[#f9f2e8] dark:hover:bg-[#1a3358] transition-colors ${
+                            item.is_read ? 'opacity-80' : ''
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex flex-col gap-1">
+                              <p className="text-[13px] font-semibold text-[#3f3124] dark:text-white/90 leading-snug">
+                                {getNotificationTitle(item)}
+                              </p>
+                              {isOffer && (
+                                <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+                                  Action Required: Accept Offer
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[11px] text-[#7b5f40] dark:text-white/60 whitespace-nowrap">
+                              {formatRelativeTime(item.created_at)}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-[12px] text-[#6b5a49] dark:text-white/75 leading-relaxed">
+                            {getNotificationBody(item)}
                           </p>
-                          <span className="text-[11px] text-[#7b5f40] dark:text-white/60 whitespace-nowrap">
-                            {formatRelativeTime(item.created_at)}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-[12px] text-[#6b5a49] dark:text-white/75 leading-relaxed">
-                          {item.body || 'Tap to open your case updates.'}
-                        </p>
-                      </button>
-                    ))
+                        </button>
+                      );
+                    })
                   )}
                 </div>
 
@@ -544,11 +763,10 @@ export default function CaseHistory() {
           <div className="relative z-30 shrink-0" ref={dropdownRef}>
             <button
               onClick={() => setIsSortOpen((v) => !v)}
-              className={`flex items-center gap-3 bg-white dark:bg-[#0f1e3f] border border-[#d8c1a1] dark:border-[#cdaa80]/50 text-[#443831] dark:text-[#cdaa80] px-4 py-2.5 rounded-lg transition-colors focus:ring-2 focus:ring-[#997953]/20 dark:focus:ring-[#cdaa80]/30 outline-none shadow-sm w-56 ${
-                isSortOpen
+              className={`flex items-center gap-3 bg-white dark:bg-[#0f1e3f] border border-[#d8c1a1] dark:border-[#cdaa80]/50 text-[#443831] dark:text-[#cdaa80] px-4 py-2.5 rounded-lg transition-colors focus:ring-2 focus:ring-[#997953]/20 dark:focus:ring-[#cdaa80]/30 outline-none shadow-sm w-56 ${isSortOpen
                   ? 'bg-[#f7efe5] ring-1 ring-[#997953]/30 dark:bg-[#213a56] dark:ring-[#cdaa80]/50'
                   : 'hover:bg-[#f9f4ec] dark:hover:bg-[#213a56]'
-              }`}
+                }`}
             >
               <svg
                 className="w-5 h-5 shrink-0 opacity-80"
@@ -567,9 +785,8 @@ export default function CaseHistory() {
                 {sortOptions.find((opt) => opt.value === sortOption)?.label || 'Sort'}
               </span>
               <svg
-                className={`w-4 h-4 shrink-0 transition-transform duration-300 ${
-                  isSortOpen ? 'rotate-180' : ''
-                }`}
+                className={`w-4 h-4 shrink-0 transition-transform duration-300 ${isSortOpen ? 'rotate-180' : ''
+                  }`}
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -595,11 +812,10 @@ export default function CaseHistory() {
                       setSortOption(option.value);
                       setIsSortOpen(false);
                     }}
-                    className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
-                      sortOption === option.value
+                    className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${sortOption === option.value
                         ? 'bg-[#f6ede1] text-[#997953] font-medium dark:bg-[#cdaa80]/20 dark:text-[#cdaa80]'
                         : 'text-[#5b4b3d] hover:bg-[#f8f1e7] hover:text-[#443831] dark:text-white/80 dark:hover:bg-[#213a56] dark:hover:text-[#cdaa80]'
-                    }`}
+                      }`}
                   >
                     {option.label}
                   </button>
@@ -620,6 +836,7 @@ export default function CaseHistory() {
               onClick={() => {
                 setClickedCardId(c.id);
                 setTimeout(() => setClickedCardId(null), 1000);
+                void openCaseDetails(c.id)
               }}
               className={`
               case-card bg-white dark:bg-[#cdaa80] rounded-lg p-6 border border-[#e3d4bf] dark:border-transparent 
@@ -655,10 +872,15 @@ export default function CaseHistory() {
                       Just Matched!
                     </span>
                   )}
+                  {offerCounts[c.id] > 0 && (
+                    <span className="inline-flex items-center px-3 py-1.5 rounded-full text-[11px] font-bold bg-amber-500 text-white shadow-[0_0_12px_rgba(245,158,11,0.4)]">
+                      {offerCounts[c.id]} {offerCounts[c.id] === 1 ? 'New Offer' : 'New Offers'}
+                    </span>
+                  )}
                 </div>
               </div>
 
-              <p className="text-[#0f1e3f]/80 text-[15px] leading-relaxed mb-6 pr-10 relative z-10 font-medium">
+              <p className="text-[#0f1e3f]/80 text-[15px] leading-relaxed mb-6 pr-10 relative z-10 font-medium line-clamp-2">
                 {c.description}
               </p>
 
@@ -668,17 +890,17 @@ export default function CaseHistory() {
                   <span className="mx-2 opacity-30">|</span>
                   <span>Date: {c.date}</span>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); void openCaseDetails(c.id) }}
-                  className="flex items-center gap-1 text-[#0f1e3f] font-bold text-sm hover:underline"
-                >
-                  View Details
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
+                {offerCounts[c.id] > 0 && c.status !== 'Lawyer Matched' && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void openCaseDetails(c.id);
+                    }}
+                    className="px-4 py-2 bg-[#0f1e3f] text-[#cdaa80] rounded-lg text-xs font-bold hover:bg-[#0f1e3f]/90 transition-all shadow-md group-hover:scale-105"
+                  >
+                    Accept Offer
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -693,116 +915,101 @@ export default function CaseHistory() {
         <Dialog.Root open={!!selectedCase} onOpenChange={(open) => { if (!open) setSelectedCase(null) }}>
           <Dialog.Portal>
             <Dialog.Overlay className="fixed inset-0 bg-black/40 backdrop-blur-[1px] z-[9998]" />
-            <Dialog.Content className="fixed left-1/2 top-1/2 w-[92vw] max-w-[760px] -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white dark:bg-[#0a152e] border border-[#e3d4bf] dark:border-[#cdaa80]/25 shadow-2xl p-5 md:p-6 z-[9999]">
-              <div className="flex items-start justify-between gap-4">
+            <Dialog.Content className="fixed left-1/2 top-1/2 w-[92vw] max-w-[800px] -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white dark:bg-[#0a152e] border border-[#e3d4bf] dark:border-[#cdaa80]/25 shadow-2xl p-5 md:p-6 z-[9999]">
+              <div className="flex items-start justify-between gap-4 border-b border-[#e7d9c7] dark:border-[#cdaa80]/20 pb-4">
                 <div>
                   <Dialog.Title className="text-lg md:text-xl font-serif text-[#997953] dark:text-[#cdaa80]">
                     {selectedCase?.title ?? 'Untitled Case'}
                   </Dialog.Title>
                   <Dialog.Description className="mt-1 text-sm font-sans text-[#5b4b3d] dark:text-white/70">
-                    {selectedCase ? selectedCase.domain.replace(/_/g, ' ') : ''}
+                    {selectedCase ? toDomainLabel(selectedCase.domain) : ''}
                   </Dialog.Description>
                 </div>
                 <Dialog.Close className="rounded-lg px-3 py-1.5 text-sm font-sans border border-[#d8c1a1] dark:border-[#cdaa80]/30 hover:bg-[#f9f4ec] dark:hover:bg-[#12284f]">
-                  Close
+                  ✕
                 </Dialog.Close>
               </div>
 
               {selectedCase && (
-                <div className="mt-4 space-y-4">
-                  <div className="text-sm font-sans text-[#2f261f] dark:text-white/85 leading-relaxed">
-                    {selectedCase.incident_description ?? 'No description provided.'}
-                  </div>
-
-                  <div className="rounded-xl border border-[#e7d9c7] dark:border-[#cdaa80]/20 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-[11px] uppercase tracking-wide font-bold text-[#997953] dark:text-[#cdaa80]">
-                        Offers from lawyers
+                <div className="mt-4">
+                    {analysisLoading ? (
+                      <div className="text-sm text-[#5b4b3d] dark:text-white/70 p-8 text-center">
+                        <p className="mb-2">Loading analysis...</p>
+                        <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-[#997953] border-r-transparent"></div>
                       </div>
+                    ) : analysisError ? (
+                      <div className="text-sm text-[#5b4b3d] dark:text-white/70 p-4 text-center space-y-2">
+                        <p>{analysisError}</p>
+                        <p className="text-[12px] text-[#7b5f40] dark:text-white/55">
+                          Open this case in chat and trigger a fresh complete analysis to sync it.
+                        </p>
+                      </div>
+                    ) : caseAnalysis ? (
+                    <AnalysisModal
+                        analysis={caseAnalysis}
+                      caseTitle={selectedCase.title || 'Case'}
+                      caseDomain={selectedCase.domain || 'General'}
+                    />
+                  ) : (
+                    <div className="text-sm text-[#5b4b3d] dark:text-white/70 p-4 text-center">
+                      AI analysis not yet available for this case. Check back soon!
                     </div>
+                  )}
 
-                    {offersError && (
-                      <div className="mt-2 text-sm font-sans text-red-500">
-                        {offersError}
-                      </div>
-                    )}
+                  <div className="mt-4 rounded-xl border border-[#e7d9c7] dark:border-[#cdaa80]/20 p-4 bg-[#fdf9f3] dark:bg-[#12284f]/50">
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <h3 className="text-base font-serif text-[#997953] dark:text-[#cdaa80]">Lawyer Offers</h3>
+                      {selectedCase.status === 'lawyer_matched' && (
+                        <span className="text-[11px] uppercase tracking-wide font-semibold text-emerald-700 dark:text-emerald-300">Accepted</span>
+                      )}
+                    </div>
 
                     {offersLoading ? (
-                      <div className="mt-3 text-sm font-sans text-[#5b4b3d] dark:text-white/70">
-                        Loading offers…
-                      </div>
+                      <p className="text-sm text-[#5b4b3d] dark:text-white/70">Loading offers...</p>
+                    ) : offersError ? (
+                      <p className="text-sm text-red-600 dark:text-red-300">{offersError}</p>
                     ) : offers.length === 0 ? (
-                      <div className="mt-3 text-sm font-sans text-[#5b4b3d] dark:text-white/70">
-                        No offers yet.
-                      </div>
+                      <p className="text-sm text-[#5b4b3d] dark:text-white/70">No active offers for this case yet.</p>
                     ) : (
-                      <div className="mt-3 space-y-2">
-                        {offers.map((o) => (
-                          <div
-                            key={o.id}
-                            className="rounded-lg border border-[#e7d9c7] dark:border-[#cdaa80]/20 px-3 py-2 bg-[#fdf9f3] dark:bg-[#12284f]/70"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="text-sm font-sans text-[#2f261f] dark:text-white/85 font-medium">
-                                  {typeof o.offer_amount === 'number' ? `₹${o.offer_amount.toLocaleString('en-IN')}` : 'Offer received'}
+                      <div className="space-y-3">
+                        {offers.map((offer) => {
+                          const joinedLawyer = (offer as CasePipelineRow & { lawyer_profiles?: { full_name?: string | null; experience_years?: number | null } }).lawyer_profiles
+                          return (
+                            <div key={offer.id} className="rounded-lg border border-[#d8c1a1] dark:border-[#cdaa80]/20 p-3 bg-white dark:bg-[#0f1e3f]/60">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-semibold text-[#2f261f] dark:text-white/90">
+                                    {joinedLawyer?.full_name ?? 'Verified lawyer'}
+                                  </p>
+                                  <p className="text-[12px] text-[#5b4b3d] dark:text-white/70">
+                                    {offer.offer_amount
+                                      ? `Offer: INR ${offer.offer_amount.toLocaleString('en-IN')}`
+                                      : 'Offer amount not specified'}
+                                  </p>
+                                  {joinedLawyer?.experience_years ? (
+                                    <p className="text-[12px] text-[#5b4b3d] dark:text-white/60">
+                                      Experience: {joinedLawyer.experience_years} years
+                                    </p>
+                                  ) : null}
                                 </div>
-                                {(() => {
-                                  const offerText = (o as { offer_message?: string; offer_note?: string }).offer_message ?? o.offer_note
-                                  if (!offerText) return null
-                                  return (
-                                    <div className="mt-1 text-[12px] font-sans text-[#5b4b3d] dark:text-white/70 break-words">
-                                      {offerText}
-                                    </div>
-                                  )
-                                })()}
-                                <div className="mt-1 text-[11px] font-sans text-[#5b4b3d] dark:text-white/60">
-                                  {o.offer_sent_at ? new Date(o.offer_sent_at).toLocaleString('en-IN') : ''}
-                                </div>
+                                  <button
+                                    onClick={() => { void handleAcceptOffer(offer.id) }}
+                                    disabled={!!acceptingOfferId || selectedCase.status === 'lawyer_matched' || selectedCase.status === 'completed' || offer.stage === 'accepted'}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-[#0f1e3f]/30 bg-[#0f1e3f] text-[#cdaa80] hover:bg-[#0f1e3f]/90 disabled:opacity-60 disabled:cursor-not-allowed"
+                                  >
+                                    {offer.stage === 'accepted' ? 'Accepted' : acceptingOfferId === offer.id ? 'Accepting...' : 'Accept Offer'}
+                                  </button>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => { void handleAcceptOffer(o.id) }}
-                                className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-sans border border-[#0f1e3f]/25 bg-[#0f1e3f] text-[#cdaa80] hover:bg-[#0f1e3f]/90 ${acceptingOfferId === o.id ? 'opacity-60 pointer-events-none' : ''}`}
-                              >
-                                {acceptingOfferId === o.id ? 'Accepting…' : 'Accept'}
-                              </button>
+                              {offer.offer_note && (
+                                <p className="mt-2 text-[12px] text-[#5b4b3d] dark:text-white/70 leading-relaxed whitespace-pre-wrap">
+                                  {offer.offer_note}
+                                </p>
+                              )}
                             </div>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
-                  </div>
-
-                  <div className="rounded-xl border border-[#e7d9c7] dark:border-[#cdaa80]/20 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-[11px] uppercase tracking-wide font-bold text-[#997953] dark:text-[#cdaa80]">
-                        AI case draft (from chatbot)
-                      </div>
-                    </div>
-
-                    <div className="mt-3 space-y-3">
-                      <div className="text-[11px] uppercase tracking-wide font-bold text-[#0f1e3f]/60 dark:text-white/60">
-                        Case brief
-                      </div>
-                      <pre className="whitespace-pre-wrap break-words rounded-lg border border-[#e7d9c7] dark:border-[#cdaa80]/20 px-3 py-2 bg-[#fdf9f3] dark:bg-[#12284f]/70 text-[12px] font-sans text-[#2f261f] dark:text-white/85">
-                        {selectedCase?.case_brief ? JSON.stringify(selectedCase.case_brief, null, 2) : 'Not available yet.'}
-                      </pre>
-
-                      <div className="text-[11px] uppercase tracking-wide font-bold text-[#0f1e3f]/60 dark:text-white/60">
-                        Evidence inventory
-                      </div>
-                      <pre className="whitespace-pre-wrap break-words rounded-lg border border-[#e7d9c7] dark:border-[#cdaa80]/20 px-3 py-2 bg-[#fdf9f3] dark:bg-[#12284f]/70 text-[12px] font-sans text-[#2f261f] dark:text-white/85">
-                        {selectedCase?.evidence_inventory ? JSON.stringify(selectedCase.evidence_inventory, null, 2) : 'Not available yet.'}
-                      </pre>
-
-                      <div className="text-[11px] uppercase tracking-wide font-bold text-[#0f1e3f]/60 dark:text-white/60">
-                        Recommended strategy
-                      </div>
-                      <pre className="whitespace-pre-wrap break-words rounded-lg border border-[#e7d9c7] dark:border-[#cdaa80]/20 px-3 py-2 bg-[#fdf9f3] dark:bg-[#12284f]/70 text-[12px] font-sans text-[#2f261f] dark:text-white/85">
-                        {selectedCase?.recommended_strategy ? JSON.stringify(selectedCase.recommended_strategy, null, 2) : 'Not available yet.'}
-                      </pre>
-                    </div>
                   </div>
                 </div>
               )}

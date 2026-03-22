@@ -376,7 +376,10 @@ export default function LawyerSelfProfilePage() {
     return (
       <div className="flex h-screen bg-gray-50 dark:bg-[#0f1e3f] overflow-hidden">
         {/* Sidebar */}
-        <div className="shrink-0 h-screen z-50 md:sticky md:top-0 shadow-[4px_0_24px_rgba(0,0,0,0.05)] dark:shadow-none bg-white dark:bg-[#0a152e]">
+        <div className="hidden md:block md:sticky md:top-0 md:h-screen shrink-0 z-[1000]">
+          <Sidebar navItems={LAWYER_NAV_ITEMS} showProfileButton={true} onProfileClick={handleProfileClick} />
+        </div>
+        <div className="md:hidden relative z-[1000]">
           <Sidebar navItems={LAWYER_NAV_ITEMS} showProfileButton={true} onProfileClick={handleProfileClick} />
         </div>
 
@@ -407,7 +410,10 @@ export default function LawyerSelfProfilePage() {
     return (
       <div className="flex h-screen bg-gray-50 dark:bg-[#0f1e3f] overflow-hidden">
         {/* Sidebar */}
-        <div className="shrink-0 h-screen z-50 md:sticky md:top-0 shadow-[4px_0_24px_rgba(0,0,0,0.05)] dark:shadow-none bg-white dark:bg-[#0a152e]">
+        <div className="hidden md:block md:sticky md:top-0 md:h-screen shrink-0 z-[1000]">
+          <Sidebar navItems={LAWYER_NAV_ITEMS} showProfileButton={true} onProfileClick={handleProfileClick} />
+        </div>
+        <div className="md:hidden relative z-[1000]">
           <Sidebar navItems={LAWYER_NAV_ITEMS} showProfileButton={true} onProfileClick={handleProfileClick} />
         </div>
 
@@ -435,7 +441,11 @@ export default function LawyerSelfProfilePage() {
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-[#0f1e3f] overflow-hidden" ref={containerRef}>
       {/* Sidebar */}
-      <div className="shrink-0 h-screen z-50 md:sticky md:top-0 shadow-[4px_0_24px_rgba(0,0,0,0.05)] dark:shadow-none bg-white dark:bg-[#0a152e]">
+      <div className="hidden md:block md:sticky md:top-0 md:h-screen shrink-0 z-[1000]">
+        <Sidebar navItems={LAWYER_NAV_ITEMS} showProfileButton={true} onProfileClick={handleProfileClick} />
+      </div>
+
+      <div className="md:hidden relative z-[1000]">
         <Sidebar navItems={LAWYER_NAV_ITEMS} showProfileButton={true} onProfileClick={handleProfileClick} />
       </div>
 

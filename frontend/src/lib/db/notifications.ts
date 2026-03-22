@@ -1,4 +1,22 @@
 import { supabase } from '@/lib/supabase/client'
+import type { Database } from '@/types/supabase'
+
+type NotificationType = Database['public']['Enums']['notification_type']
+
+export async function createNotification(payload: {
+  user_id: string
+  type: NotificationType
+  title: string
+  body?: string | null
+  data?: Record<string, unknown> | null
+}) {
+  const { data, error } = await supabase
+    .from('notifications')
+    .insert(payload)
+    .select('*')
+    .single()
+  return { data, error }
+}
 
 export async function getNotifications(userId: string, limit = 20) {
   const { data, error } = await supabase

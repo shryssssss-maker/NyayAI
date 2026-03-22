@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import gsap from 'gsap';
+import { useRouter } from 'next/navigation';
 import { Sidebar } from '../../../../components/sidebar';
 import type { NavItem } from '../../../../components/sidebar';
 import { supabase } from '@/lib/supabase/client';
@@ -97,6 +98,7 @@ function formatDomain(d: string): string {
 }
 
 export default function YourCasesKanban() {
+  const router = useRouter();
   const [cards, setCards]         = useState<KanbanCard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [dbError, setDbError]     = useState<string | null>(null);
@@ -239,8 +241,11 @@ export default function YourCasesKanban() {
   // ── Render ─────────────────────────────────────────────
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-[#0f1e3f]">
-      <div className="md:sticky md:top-0 md:h-screen shrink-0 z-50">
-        <Sidebar navItems={LAWYER_NAV_ITEMS} />
+      <div className="hidden md:block md:sticky md:top-0 md:h-screen shrink-0 z-[1000]">
+        <Sidebar navItems={LAWYER_NAV_ITEMS} showProfileButton={true} onProfileClick={() => router.push('/lawyerside/profile')} />
+      </div>
+      <div className="md:hidden relative z-[1000]">
+        <Sidebar navItems={LAWYER_NAV_ITEMS} showProfileButton={true} onProfileClick={() => router.push('/lawyerside/profile')} />
       </div>
 
       <div className="flex-1 p-6 md:p-10 text-gray-900 dark:text-white font-serif overflow-x-auto">

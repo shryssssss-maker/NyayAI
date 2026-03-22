@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Query, Depends
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -13,9 +13,14 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "agents"
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "schemas")))
 
 from orchestrator import build_nyaya_graph
+from app.services.legal_graph_service import legal_graph_service
+from app.services.legal_updates_service import legal_updates_service
+from retrieval import get_domain_topic_sections
 import json
 import sqlite3
 from datetime import datetime
+from app.core.auth import get_current_citizen
+from app.core.supabase import supabase_admin
 
 app = FastAPI(title="NyayaAI API", version="4.0.0")
 
@@ -35,9 +40,89 @@ class IntakeRequest(BaseModel):
     state_jurisdiction: Optional[str] = "Maharashtra"
     mode: Literal["citizen", "lawyer"] = "citizen"
 
+
+class DomainTopicsRequest(BaseModel):
+    domain: str = Field(min_length=1, max_length=100)
+    per_topic_limit: int = Field(default=5, ge=1, le=12)
+
+
+class DomainTopicItem(BaseModel):
+    title: str
+    explanation: str
+    source_section: str
+    score: Optional[float] = None
+    is_fallback: bool = False
+
+
+class DomainTopicsResponse(BaseModel):
+    domain: str
+    topics: list[DomainTopicItem]
+
+
+class LegalUpdateItem(BaseModel):
+    title: str
+    short_summary: str
+    source: str
+    link: str
+    published_at: str
+
+
+class LegalUpdatesResponse(BaseModel):
+    updates: list[LegalUpdateItem]
+    mode: str
+    fetched_at: str
+
+
+class AcceptOfferRequest(BaseModel):
+    pipeline_id: str
+    case_id: str
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "version": "4.0.0"}
+
+
+@app.get("/legal-graph/health")
+async def legal_graph_health():
+    return legal_graph_service.health()
+
+
+@app.get("/legal-graph/acts/{act_name}/chapters")
+async def legal_graph_chapters(act_name: str):
+    neo4j_health = legal_graph_service.health()
+    return {
+        "act_name": act_name,
+        "chapters": legal_graph_service.get_chapters_under_act(act_name),
+        "neo4j": neo4j_health,
+    }
+
+
+@app.get("/legal-graph/acts/{act_name}/chapters/{chapter_number}/sections")
+async def legal_graph_sections(act_name: str, chapter_number: str):
+    neo4j_health = legal_graph_service.health()
+    return {
+        "act_name": act_name,
+        "chapter_number": chapter_number,
+        "sections": legal_graph_service.get_sections_under_chapter(act_name, chapter_number),
+        "neo4j": neo4j_health,
+    }
+
+
+@app.get("/legal-graph/acts/{act_name}/sections/{section_number}")
+async def legal_graph_section_detail(act_name: str, section_number: str):
+    neo4j_health = legal_graph_service.health()
+    if not neo4j_health.get("available", False):
+        return {
+            "act_name": act_name,
+            "section_number": section_number,
+            "section": None,
+            "neo4j": neo4j_health,
+        }
+
+    section = legal_graph_service.get_section_by_number(act_name, section_number)
+    if not section:
+        raise HTTPException(status_code=404, detail="Section not found")
+    return section
 
 @app.get("/download/{filename}")
 async def download_file(filename: str):
@@ -45,6 +130,24 @@ async def download_file(filename: str):
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(filepath, filename=filename)
+
+
+@app.post("/legal/domain-topics", response_model=DomainTopicsResponse)
+async def legal_domain_topics(request: DomainTopicsRequest):
+    try:
+        topics = get_domain_topic_sections(request.domain, per_topic_limit=request.per_topic_limit)
+        return DomainTopicsResponse(domain=request.domain, topics=topics)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve domain topics: {str(e)}")
+
+
+@app.get("/explorer/legal-updates", response_model=LegalUpdatesResponse)
+async def explorer_legal_updates(limit: int = Query(default=8, ge=5, le=10)):
+    try:
+        payload = await legal_updates_service.get_updates_payload(limit=limit)
+        return LegalUpdatesResponse(**payload)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve legal updates: {str(e)}")
 
 # Initialize the LangGraph
 nyaya_graph = build_nyaya_graph()
@@ -115,6 +218,27 @@ def get_all_cases():
     rows = c.fetchall()
     conn.close()
     return [dict(row) for row in rows]
+
+def get_case_by_id(case_id: str):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("SELECT * FROM cases WHERE case_id = ?", (case_id,))
+    row = c.fetchone()
+    conn.close()
+    
+    if not row:
+        return None
+    
+    case_dict = dict(row)
+    # Parse the metadata_json to return full analysis
+    if case_dict.get('metadata_json'):
+        try:
+            case_dict['analysis'] = json.loads(case_dict['metadata_json'])
+        except json.JSONDecodeError:
+            case_dict['analysis'] = None
+    
+    return case_dict
 
 @app.post("/analyze")
 async def analyze_case(request: IntakeRequest):
@@ -193,6 +317,126 @@ async def save_case(case_id: str):
 async def list_cases():
     cases = get_all_cases()
     return {"cases": cases}
+
+@app.get("/cases/{case_id}")
+async def get_case_analysis(case_id: str):
+    case = get_case_by_id(case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return case
+
+
+@app.post("/pipeline/accept-offer")
+async def accept_offer_secure(
+    request: AcceptOfferRequest,
+    user=Depends(get_current_citizen),
+):
+    citizen_id = user.get("sub")
+    if not citizen_id:
+        raise HTTPException(status_code=401, detail="Invalid auth token")
+
+    try:
+        pipeline_res = (
+            supabase_admin
+            .table("case_pipeline")
+            .select("id, case_id, lawyer_id, stage, offer_amount")
+            .eq("id", request.pipeline_id)
+            .maybe_single()
+            .execute()
+        )
+        pipeline_row = pipeline_res.data
+
+        if not pipeline_row:
+            raise HTTPException(status_code=404, detail="Offer not found")
+
+        if pipeline_row.get("case_id") != request.case_id:
+            raise HTTPException(status_code=409, detail="Offer does not belong to this case")
+
+        if pipeline_row.get("stage") != "offered":
+            raise HTTPException(status_code=409, detail="Offer is no longer pending")
+
+        case_res = (
+            supabase_admin
+            .table("cases")
+            .select("id, title, citizen_id, status")
+            .eq("id", request.case_id)
+            .maybe_single()
+            .execute()
+        )
+        case_row = case_res.data
+
+        if not case_row:
+            raise HTTPException(status_code=404, detail="Case not found")
+
+        if case_row.get("citizen_id") != citizen_id:
+            raise HTTPException(status_code=403, detail="You are not allowed to accept offers for this case")
+
+        if case_row.get("status") in ["lawyer_matched", "active", "completed"]:
+            raise HTTPException(status_code=409, detail="Case is already matched")
+
+        now_iso = datetime.utcnow().isoformat()
+
+        accepted_res = (
+            supabase_admin
+            .table("case_pipeline")
+            .update({"stage": "accepted", "accepted_at": now_iso})
+            .eq("id", request.pipeline_id)
+            .execute()
+        )
+
+        (
+            supabase_admin
+            .table("case_pipeline")
+            .update({"stage": "withdrawn"})
+            .eq("case_id", request.case_id)
+            .eq("stage", "offered")
+            .neq("id", request.pipeline_id)
+            .execute()
+        )
+
+        (
+            supabase_admin
+            .table("cases")
+            .update({
+                "status": "lawyer_matched",
+                "lawyer_matched_at": now_iso,
+                "is_seeking_lawyer": False,
+            })
+            .eq("id", request.case_id)
+            .execute()
+        )
+
+        lawyer_id = pipeline_row.get("lawyer_id")
+        if lawyer_id:
+            amount = pipeline_row.get("offer_amount")
+            amount_suffix = f" (Offer: INR {int(amount):,})" if isinstance(amount, (int, float)) else ""
+            (
+                supabase_admin
+                .table("notifications")
+                .insert({
+                    "user_id": lawyer_id,
+                    "type": "offer_accepted",
+                    "title": "Your offer was accepted",
+                    "body": f"{case_row.get('title') or 'A case'} has accepted your offer{amount_suffix}.",
+                    "data": {
+                        "case_id": request.case_id,
+                        "pipeline_id": request.pipeline_id,
+                        "lawyer_id": lawyer_id,
+                    },
+                })
+                .execute()
+            )
+
+        return {
+            "success": True,
+            "pipeline": accepted_res.data,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Secure offer accept failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to accept offer")
+
 
 @app.post("/transcribe")
 async def transcribe_audio(file: UploadFile = File(...)):

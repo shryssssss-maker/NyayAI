@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import gsap from 'gsap';
 import { Menu, Home, Compass, Gavel, Store, HelpCircle, Sun, Moon, LogOut, User, type LucideIcon } from 'lucide-react';
 import { useGSAP } from '@gsap/react';
@@ -86,6 +86,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   themeColors = {},
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isReady, setIsReady] = useState(false);
 
   // Restore expanded state from localStorage on mount (client-side only)
   useEffect(() => {
@@ -98,8 +99,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         const stored = localStorage.getItem('sidebarExpanded');
         if (stored === 'true') {
           setIsExpanded(true);
+        } else {
+          setIsExpanded(false);
         }
       }
+      setIsReady(true);
     }
   }, []);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -110,7 +114,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const expandTlRef = useRef<gsap.core.Timeline | null>(null);
 
   const router = useRouter();
+  const pathname = usePathname();
   const { theme, toggleTheme, mounted } = useTheme();
+
+  // Close sidebar on route change (mobile only)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setIsExpanded(false);
+    }
+  }, [pathname]);
 
   // Merge default colors with any user-provided overrides
   const colors = { ...DEFAULT_THEME, ...themeColors };
@@ -190,12 +202,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
     mm.add("(max-width: 767px)", () => {
       const items = iconRefs.current.filter(Boolean);
+      const labels = labelRefs.current.filter(Boolean);
 
-      // Animate mobile drawer position
+      // Animate mobile drawer position and width
       gsap.to(sidebarRef.current, {
         x: isExpanded ? 0 : '-100%',
+        width: isExpanded ? 240 : 0,
+        opacity: isExpanded ? 1 : 0,
         duration: 0.5,
         ease: isExpanded ? 'expo.out' : 'expo.in',
+        overwrite: 'auto',
+      });
+
+      // Animate labels on mobile
+      gsap.to(labels, {
+        opacity: isExpanded ? 1 : 0,
+        maxWidth: isExpanded ? 200 : 0,
+        x: isExpanded ? 0 : -10,
+        marginLeft: isExpanded ? 16 : 0,
+        duration: 0.4,
+        ease: 'power2.out',
+        stagger: isExpanded ? 0.05 : 0,
         overwrite: 'auto',
       });
 
@@ -228,7 +255,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     });
 
     return () => mm.revert();
-  }, { dependencies: [isExpanded, mounted], scope: sidebarRef });
+  }, { dependencies: [isExpanded, mounted, isReady], scope: sidebarRef });
 
   // GSAP Hover Effects
   const handleMouseEnter = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -277,7 +304,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Mobile Menu Toggle Button - Only visible on mobile */}
       <button
         onClick={handleMenuToggle}
-        className="fixed top-4 left-4 z-[60] p-3 rounded-full bg-[var(--sb-bg-light)] dark:bg-[var(--sb-bg-dark)] text-[var(--sb-text-light)] dark:text-[var(--sb-text-dark)] shadow-lg md:hidden border border-[var(--sb-text-light)]/20 dark:border-[var(--sb-text-dark)]/20 active:scale-90 transition-transform duration-200"
+        className="fixed top-4 left-4 z-[1100] p-3 rounded-full bg-[var(--sb-bg-light)] dark:bg-[var(--sb-bg-dark)] text-[var(--sb-text-light)] dark:text-[var(--sb-text-dark)] shadow-lg md:hidden border border-[var(--sb-text-light)]/20 dark:border-[var(--sb-text-dark)]/20 active:scale-90 transition-transform duration-200"
         style={dynamicStyles}
       >
         <Menu size={20} />
@@ -286,19 +313,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Backdrop for mobile drawer */}
       <div 
         ref={backdropRef}
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[45] md:hidden opacity-0 pointer-events-none"
-        onClick={() => setIsExpanded(false)}
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[999] md:hidden opacity-0 pointer-events-none"
+        onClick={() => {
+          setIsExpanded(false);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('sidebarExpanded', 'false');
+          }
+        }}
       />
 
       <aside
         ref={sidebarRef}
         style={dynamicStyles}
         className={`
-          fixed top-0 left-0 h-full w-[240px] transition-colors duration-300 ease-in-out z-50
+          fixed top-0 left-0 h-full w-[90px] transition-colors duration-300 ease-in-out z-[1000]
           md:relative md:h-full md:flex-col md:rounded-none md:shadow-none md:py-10 md:px-0 md:overflow-visible
           flex flex-col py-6 px-4
           bg-[var(--sb-bg-light)] dark:bg-[var(--sb-bg-dark)] 
           text-[var(--sb-text-light)] dark:text-[var(--sb-text-dark)] 
+          ${!isReady && 'opacity-0'}
         `}
       >
       {/* Top / Main Navigation Items */}

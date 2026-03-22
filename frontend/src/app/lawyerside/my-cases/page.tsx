@@ -10,6 +10,7 @@ import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, type D
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 type CaseRow = Database['public']['Tables']['cases']['Row']
 type PipelineRow = Database['public']['Tables']['case_pipeline']['Row']
@@ -161,17 +162,63 @@ export default function LawyerMyCasesPage() {
   }, [])
 
   useEffect(() => {
-    void fetchMyCases()
+    let casesChannel: ReturnType<typeof supabase.channel> | null = null
+    let notificationsChannel: ReturnType<typeof supabase.channel> | null = null
 
-    const channel = supabase
-      .channel('lawyer-my-cases-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'case_pipeline' }, () => {
-        void fetchMyCases()
-      })
-      .subscribe()
+    const init = async () => {
+      void fetchMyCases()
+
+      const { data: authData, error: authError } = await supabase.auth.getUser()
+      if (authError || !authData.user) return
+
+      casesChannel = supabase
+        .channel(`lawyer-my-cases-live:${authData.user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'case_pipeline',
+            filter: `lawyer_id=eq.${authData.user.id}`,
+          },
+          () => {
+            void fetchMyCases()
+          }
+        )
+        .subscribe()
+
+      notificationsChannel = supabase
+        .channel(`lawyer-my-cases-notifications:${authData.user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${authData.user.id}`,
+          },
+          (payload) => {
+            const fresh = payload.new as Record<string, unknown>
+            if (fresh.type === 'offer_accepted') {
+              toast.success('Offer accepted', {
+                description: (fresh.body as string) || 'A citizen accepted your offer.',
+              })
+              void fetchMyCases()
+            }
+          }
+        )
+        .subscribe()
+    }
+
+    void init()
 
     return () => {
-      void supabase.removeChannel(channel)
+      if (casesChannel) {
+        void supabase.removeChannel(casesChannel)
+      }
+      if (notificationsChannel) {
+        void supabase.removeChannel(notificationsChannel)
+      }
     }
   }, [fetchMyCases])
 
@@ -322,11 +369,14 @@ export default function LawyerMyCasesPage() {
 
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-[#0f1e3f]">
-      <div className="md:sticky md:top-0 md:h-screen shrink-0 z-50">
+      <div className="hidden md:block md:sticky md:top-0 md:h-screen shrink-0 z-[1000]">
+        <Sidebar navItems={LAWYER_NAV_ITEMS} showProfileButton={true} onProfileClick={handleProfileClick} />
+      </div>
+      <div className="md:hidden relative z-[1000]">
         <Sidebar navItems={LAWYER_NAV_ITEMS} showProfileButton={true} onProfileClick={handleProfileClick} />
       </div>
 
-      <div className="flex-1 p-6 md:p-10 text-gray-900 dark:text-white">
+      <div className="flex-1 pt-20 px-6 pb-6 md:p-10 text-gray-900 dark:text-white">
         <div className="max-w-[1280px] mx-auto">
           <div className="mb-8">
             <h1 className="text-3xl font-medium tracking-wide text-[#997953] dark:text-[#cdaa80] mb-2 font-serif">My Cases</h1>

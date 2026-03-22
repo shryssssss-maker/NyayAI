@@ -7,47 +7,10 @@ import { Sidebar } from '../../../../components/sidebar';
 import { supabase } from '@/lib/supabase/client';
 import type { Database } from '@/types/supabase';
 import Link from 'next/link';
+import { PriceWheel } from '../../../../components/PriceWheel';
+import { canonicalizeDomain, isKnownDomain, listHasDomain, toDomainLabel } from '@/lib/utils/domain';
 
 type LawyerProfile = Database['public']['Tables']['lawyer_profiles']['Row'];
-
-const DOMAIN_LABELS: Record<string, string> = {
-  consumer:              'Consumer Disputes',
-  tenant:                'Tenant / Rent',
-  labour:                'Labour & Employment',
-  criminal:              'Criminal Law',
-  cyber:                 'Cyber Crime',
-  property:              'Property Law',
-  family:                'Family Law',
-  rti:                   'RTI',
-  corruption:            'Anti-Corruption',
-  civil:                 'Civil Law',
-  other:                 'General Practice',
-  tax:                   'Tax Law',
-  corporate:             'Corporate / Business',
-  intellectual_property: 'Intellectual Property',
-  constitutional:        'Constitutional / PIL',
-  banking_finance:       'Banking & Finance',
-  insurance:             'Insurance',
-  matrimonial:           'Matrimonial',
-  immigration:           'Immigration',
-  environmental:         'Environmental Law',
-  medical_negligence:    'Medical Negligence',
-  motor_accident:        'Motor Accident Claims',
-  cheque_bounce:         'Cheque Bounce (NI Act)',
-  debt_recovery:         'Debt Recovery',
-  arbitration:           'Arbitration & ADR',
-  service_matters:       'Service Matters',
-  land_acquisition:      'Land Acquisition',
-  wills_succession:      'Wills & Succession',
-  domestic_violence:     'Domestic Violence',
-  pocso:                 'POCSO',
-  sc_st_atrocities:      'SC/ST Atrocities Act',
-  divorce:               'Divorce',
-}
-
-function formatDomain(domain: string): string {
-  return DOMAIN_LABELS[domain] ?? domain.replace(/_/g, ' ')
-}
 
 function formatResponseTime(hours: number | null): string {
   if (!hours || hours <= 1)  return 'Responds within 1 hour'
@@ -101,8 +64,8 @@ function MarketplaceContent() {
   // Handle URL pre-filtering
   useEffect(() => {
     const typeParam = searchParams.get('type')
-    if (typeParam && DOMAIN_LABELS[typeParam]) {
-      setSelectedLawType(typeParam)
+    if (typeParam && isKnownDomain(typeParam)) {
+      setSelectedLawType(canonicalizeDomain(typeParam))
     }
   }, [searchParams])
 
@@ -191,7 +154,7 @@ function MarketplaceContent() {
   const priceOptions = useMemo(() => {
     let lawyers = allLawyers
     if (selectedLawType !== 'Law Type') {
-      lawyers = lawyers.filter(l => l.specialisations?.includes(selectedLawType as any))
+      lawyers = lawyers.filter((l) => listHasDomain(l.specialisations ?? [], selectedLawType))
     }
     if (selectedExperience !== 'Years in Practice') {
       const opt = experienceOptions.find(o => o.label === selectedExperience)
@@ -239,14 +202,17 @@ function MarketplaceContent() {
     lawyers     = lawyers.filter(l => !l.fee_min || l.fee_min <= maxP)
 
     const types = new Set<string>()
-    lawyers.forEach(l => l.specialisations?.forEach(s => types.add(s)))
+    lawyers.forEach((l) => l.specialisations?.forEach((s) => {
+      const canonical = canonicalizeDomain(s)
+      if (canonical) types.add(canonical)
+    }))
     return Array.from(types).sort()
   }, [allLawyers, selectedExperience, selectedPriceIndex, priceOptions, experienceOptions])
 
   const experienceLabels = useMemo(() => {
     let lawyers = allLawyers
     if (selectedLawType !== 'Law Type') {
-      lawyers = lawyers.filter(l => l.specialisations?.includes(selectedLawType as any))
+      lawyers = lawyers.filter((l) => listHasDomain(l.specialisations ?? [], selectedLawType))
     }
     const idx  = Math.min(selectedPriceIndex, priceOptions.length - 1)
     const maxP = parsePrice(priceOptions[idx] ?? '₹2L+')
@@ -276,7 +242,7 @@ function MarketplaceContent() {
     let result = [...allLawyers]
 
     if (selectedLawType !== 'Law Type') {
-      result = result.filter(l => l.specialisations?.includes(selectedLawType as any))
+      result = result.filter((l) => listHasDomain(l.specialisations ?? [], selectedLawType))
     }
 
     if (selectedExperience !== 'Years in Practice') {
@@ -348,11 +314,14 @@ function MarketplaceContent() {
   // ── Render ─────────────────────────────────────────────
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-[#0f1e3f]">
-      <div className="md:sticky md:top-0 md:h-screen shrink-0 z-50">
+      <div className="hidden md:block md:sticky md:top-0 md:h-screen shrink-0 z-[1000]">
+        <Sidebar />
+      </div>
+      <div className="md:hidden relative z-[1000]">
         <Sidebar />
       </div>
 
-      <div className="flex-1 max-w-[1200px] mx-auto p-6 md:p-10 text-gray-900 dark:text-white font-serif">
+      <div className="flex-1 max-w-[1200px] mx-auto pt-20 px-6 pb-6 md:p-10 text-gray-900 dark:text-white font-serif">
 
         {/* Header */}
         <div className="mb-10">
@@ -408,7 +377,7 @@ function MarketplaceContent() {
                     onClick={() => { setSelectedLawType(type); setIsLawTypeOpen(false) }}
                     className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${selectedLawType === type ? 'bg-[#f6ede1] text-[#997953] font-medium dark:bg-[#cdaa80]/20 dark:text-[#cdaa80]' : 'text-[#5b4b3d] hover:bg-[#f8f1e7] hover:text-[#443831] dark:text-white/80 dark:hover:bg-[#213a56] dark:hover:text-[#cdaa80]'}`}
                   >
-                    {formatDomain(type)}
+                    {toDomainLabel(type)}
                   </button>
                 ))}
               </div>
@@ -416,33 +385,11 @@ function MarketplaceContent() {
           </div>
 
           {/* Price Wheel */}
-          <div className="relative w-full md:w-[420px] h-16 bg-[#f5eee2] dark:bg-[#0a152e] shrink-0 flex items-center justify-center overflow-hidden rounded-full border border-[#dcc7aa] dark:border-[#cdaa80]/20 shadow-[inset_0_2px_8px_rgba(153,121,83,0.12),_0_10px_24px_rgba(68,56,49,0.08)] dark:shadow-[inset_0_4px_12px_rgba(0,0,0,0.5),_0_8px_32px_rgba(0,0,0,0.4)]">
-            <div className="absolute left-0 w-24 h-full bg-gradient-to-r from-[#f5eee2] via-[#f5eee2]/80 to-transparent dark:from-[#0a152e] dark:via-[#0a152e]/80 z-20 pointer-events-none rounded-l-full" />
-            <div className="absolute right-0 w-24 h-full bg-gradient-to-l from-[#f5eee2] via-[#f5eee2]/80 to-transparent dark:from-[#0a152e] dark:via-[#0a152e]/80 z-20 pointer-events-none rounded-r-full" />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[84px] h-[46px] bg-white/90 dark:bg-[#cdaa80]/15 border border-[#c7ab88] dark:border-[#cdaa80]/70 rounded-full z-10 pointer-events-none shadow-[0_0_18px_rgba(153,121,83,0.16)] dark:shadow-[0_0_20px_rgba(205,170,128,0.3)]" />
-            <div
-              className="absolute top-1/2 left-1/2 flex items-center transition-transform duration-500 ease-out z-10"
-              style={{ transform: `translate(calc(-${selectedPriceIndex * 84 + 42}px), -50%)` }}
-            >
-              {priceOptions.map((price, idx) => {
-                const dist       = Math.abs(idx - selectedPriceIndex)
-                const isSelected = dist === 0
-                return (
-                  <div
-                    key={price}
-                    onClick={() => setSelectedPriceIndex(idx)}
-                    className={`w-[84px] shrink-0 text-center cursor-pointer transition-all duration-300 font-serif tracking-wide text-[16px] ${isSelected ? 'text-[#997953] drop-shadow-[0_0_10px_rgba(153,121,83,0.28)] dark:text-[#cdaa80] dark:drop-shadow-[0_0_12px_rgba(205,170,128,1)]' : 'text-[#7b6958]/60 hover:text-[#443831] dark:text-[#cdaa80]/50 dark:hover:text-[#cdaa80]/80'}`}
-                    style={{
-                      transform: `scale(${isSelected ? 1.05 : Math.max(0.7, 1 - dist * 0.15)})`,
-                      opacity:    isSelected ? 1 : Math.max(0.15, 1 - dist * 0.25),
-                    }}
-                  >
-                    {price}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
+          <PriceWheel
+            options={priceOptions}
+            selectedIndex={selectedPriceIndex}
+            onChange={setSelectedPriceIndex}
+          />
 
           {/* Experience */}
           <div className="relative z-40 shrink-0" ref={expDropdownRef}>
@@ -513,7 +460,7 @@ function MarketplaceContent() {
             </div>
           ) : (
             filteredLawyers.map(lawyer => {
-              const primaryDomain  = lawyer.specialisations?.[0] ?? 'other'
+              const primaryDomain  = canonicalizeDomain(lawyer.specialisations?.[0] ?? 'other') || 'other'
               const priceRange     = formatFeeRange(lawyer.fee_min, lawyer.fee_max)
               const responseTime   = formatResponseTime(lawyer.response_time_hours)
               const displayName    = lawyer.full_name?.includes('Adv.')
@@ -522,7 +469,7 @@ function MarketplaceContent() {
 
               return (
                 <Link
-                  href={`/citizen/lawyer/${lawyer.id}?domain=${encodeURIComponent(selectedLawType !== 'Law Type' ? selectedLawType : primaryDomain)}`}
+                  href={`/citizen/lawyer/${lawyer.id}?domain=${encodeURIComponent(selectedLawType !== 'Law Type' ? canonicalizeDomain(selectedLawType) : primaryDomain)}`}
                   key={lawyer.id}
                   onMouseEnter={() => setHoveredCard(lawyer.id)}
                   onMouseLeave={() => setHoveredCard(null)}
@@ -536,7 +483,7 @@ function MarketplaceContent() {
                     <div className="flex-1 space-y-3">
                       <div className="flex justify-between items-start gap-4">
                         <span className="inline-block px-1.5 py-0.5 bg-[#0f1e3f]/10 rounded text-[10px] font-bold tracking-wider font-sans text-[#0f1e3f]/70 uppercase">
-                          {formatDomain(primaryDomain)}
+                          {toDomainLabel(primaryDomain)}
                         </span>
                         <div className="md:hidden text-right font-sans">
                           <div className="text-lg font-bold font-serif">{priceRange}</div>
@@ -560,7 +507,7 @@ function MarketplaceContent() {
                               key={spec}
                               className="px-2 py-0.5 bg-[#0f1e3f]/10 rounded-full text-[10px] font-sans text-[#0f1e3f]/60"
                             >
-                              {formatDomain(spec)}
+                              {toDomainLabel(spec)}
                             </span>
                           ))}
                         </div>

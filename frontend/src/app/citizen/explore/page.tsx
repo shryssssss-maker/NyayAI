@@ -165,7 +165,10 @@ export default function LegalRightsExplorer() {
   return (
     <div className="flex bg-gray-50 dark:bg-[#0f1e3f] font-sans h-screen overflow-hidden text-gray-900 dark:text-white transition-colors duration-300" ref={containerRef}>
       {/* Sidebar Navigation */}
-      <div className="shrink-0 h-screen z-50 md:sticky md:top-0 shadow-[4px_0_24px_rgba(0,0,0,0.05)] dark:shadow-none bg-white dark:bg-[#0a152e]">
+      <div className="hidden md:block shrink-0 h-screen z-[1000] md:sticky md:top-0 shadow-[4px_0_24px_rgba(0,0,0,0.05)] dark:shadow-none bg-white dark:bg-[#0a152e]">
+        <Sidebar />
+      </div>
+      <div className="md:hidden relative z-[1000]">
         <Sidebar />
       </div>
 
@@ -175,7 +178,7 @@ export default function LegalRightsExplorer() {
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#997953]/[0.08] dark:bg-white/[0.02] rounded-full blur-[100px] pointer-events-none"></div>
         <div className="absolute bottom-0 right-0 w-[300px] h-[300px] bg-[#997953]/[0.12] dark:bg-[#cdaa80]/[0.05] rounded-full blur-[80px] pointer-events-none"></div>
 
-        <div className="w-full max-w-[1400px] mx-auto px-6 py-10 md:py-12 z-10 flex flex-col flex-1">
+        <div className="w-full max-w-[1400px] mx-auto pt-20 pb-10 px-6 md:py-12 z-10 flex flex-col flex-1">
           
           {/* Title - Add pt-8 to give space for header if needed */}
           <h1 ref={titleRef} className="pt-4 md:pt-8 text-3xl md:text-4xl lg:text-[46px] font-serif font-bold text-[#997953] dark:text-[#cdaa80] text-center mb-10 tracking-widest drop-shadow-md">
