@@ -1,4 +1,4 @@
-﻿**NyayaAI**  Product Requirements Document  v4.0	**CONFIDENTIAL**
+**NyayaAI**  Product Requirements Document  v4.0	**CONFIDENTIAL**
 
 
 ⚖
@@ -26,13 +26,11 @@ NyayaAI is a production-grade, multi-agent legal assistance platform built for I
 Version 4.0 completes the marketplace loop. v3.0 gave citizens the ability to discover and contact lawyers. v4.0 builds the lawyer-facing side: a professional dashboard where advocates manage their practice, receive pre-qualified leads with AI-prepared briefs, track case pipelines, and use the same AI-powered legal research tool to strengthen their own work.
 
 ### **What Is New in v4.0**
-- **Lawyer Dashboard:** A full professional portal for advocates — case pipeline, profile management, earnings overview
-- **Available Cases Feed:** Lawyers browse open citizen cases filtered by specialisation, location, and budget
-- **Case Pipeline Management:** Pending, Offered, Accepted, and Completed case stages managed in one place
-- **Lawyer Profile Builder:** Advocates build and maintain their verified profile — cases, credentials, fees, languages
-- **Speciality Case Feed:** Curated feed of cases matching the lawyer's declared specialisations
-- **Unassigned Cases Queue:** High-visibility feed of cases with no lawyer response — preventing cases from going stale
-- **Lawyer Legal Explorer:** Same AI chatbot as citizens but scoped for professional legal research by law category
+- **Premium Analysis UI:** 4-Phase Legal Journey timeline and 3-Factor Case Strength scoring (Details, Evidence, Laws)
+- **Deterministic AI Engine:** 100% reproducible legal analysis through zero-temperature agent configuration
+- **Action-Triggered Persistence:** 'Lazy-sync' storage where cases are committed to the dashboard only upon document download
+- **Complete Wipeout Deletion:** Atomic removal of cases across Supabase, SQLite, and physical server storage
+- **Lawyer Legal Explorer:** Professional-grade research tool with full corpus and citation history
 
 
 # **2. Problem Statement**
@@ -97,15 +95,14 @@ The citizen-side product is carried forward from v3.0 without changes. This sect
 
 |**Feature**|**Description**|
 | :- | :- |
-|Conversational Intake|Guided conversation with OCR document processing and evidence auto-tagging|
-|Fact Confirmation|Plain-language fact summary for citizen confirmation before pipeline proceeds|
-|Legal Research|BNS/BNSS-primary semantic retrieval with state-specific variation detection|
-|Strategy & Action Plan|Prioritised steps, forum routing, timeline, cost estimate, lawyer flag|
-|Document Generation|Legal notice, FIR draft, consumer complaint, RTI, affidavit — Word + PDF export|
-|Explainability Layer|Per-section confidence scores, retrieval source display, reasoning chain export|
-|Citizen Marketplace|AI-matched lawyer cards, profile pages, fee negotiation, brief dispatch|
-|Case Status Tracker|Chronological timeline, upcoming deadlines, hearing reminders|
-|Legal Rights Explorer|Browse by domain or section number in Hindi / English / Hinglish|
+|Conversational Intake|Guided chat with OCR processing and deterministic evidence auto-tagging (Temp=0.0)|
+|4-Phase Analysis|Boutique legal journey mapping: Intake → Evaluation → Mapping → Resolution|
+|3-Factor Scoring|Premium Case Strength meter (1-5) based on Fact Detail, Evidence Quality, and Legal Merit|
+|Action-Sync Dashboard|Intelligent storage—cases are committed to permanent history only upon document download|
+|Complete Wipeout|Atomic 'one-click' deletion across cloud DB, local DB, and physical server file storage|
+|Document Generation|Legal notice, FIR draft, consumer complaint — Word + PDF export with automatic sync|
+|Explainability Layer|High-trust reasoning traces with section confidence and reasoning chain exports|
+|Citizen Marketplace|AI-matched lawyer cards with qualified briefs and integrated negotiation|
 
 
 # **6. Lawyer Portal — New in v4.0**
@@ -326,8 +323,8 @@ This section maps the complete journey from a citizen's first interaction to a r
 |4|Research Agent|Semantic search on Qdrant — BNS/BNSS + state law|Verified legal citations returned|
 |5|Strategy Agent|Builds action plan, sets lawyer\_recommended flag if needed|Action plan + lawyer flag stored in CaseState|
 |6|Drafting Agent|Generates documents — legal notice, FIR draft, etc.|Documents stored in Supabase Storage|
-|7|Explainability Agent|Produces confidence scores, reasoning trace|Full audit trail stored in PostgreSQL|
-|8|System|Case analysis complete — citizen sees results across Chat, Analytics, Timeline, Documents tabs|CaseState fully populated|
+|7|Explainability Agent|Produces 3-Factor scores, 4-Phase mapping, and deterministic reasoning trace|Audit trail built in memory|
+|8|System|Analysis complete — citizen views 4-Phase Timeline; **Case commits to Dashboard only upon document download**|CaseState synced to Supabase/SQLite on Trigger|
 
 ## **7.2 Phase 2 — Citizen Initiates Lawyer Search**
 
@@ -368,7 +365,8 @@ This section maps the complete journey from a citizen's first interaction to a r
 |26|System|Prompts citizen to leave a review|Review request sent via in-app notification|
 |27|Citizen|Submits star rating and written review|Review stored, linked to lawyer profile|
 |28|Lawyer|Imports completed case to profile history|Anonymised case record added to lawyer's public profile|
-|29|System|Updates lawyer's win rate and review average|Profile metrics recalculated in PostgreSQL|
+|29|Citizen|Performs 'Complete Wipeout' for testing or privacy|Physical files, SQLite record, and Supabase entry purged atomically|
+|30|System|Updates lawyer's win rate and review average|Profile metrics recalculated in PostgreSQL|
 
 ## **7.6 Parallel Flow — Unassigned Case Escalation**
 
@@ -544,13 +542,13 @@ Stores Explorer research outputs saved by lawyers to specific active cases.
 # **11. The Five-Agent Pipeline**
 The five-agent pipeline is unchanged from v3.0 in its citizen-facing operation. v4.0 adds a new consumption layer: the Lawyer Legal Explorer uses the Research and Explainability agents in a separate mode, treating lawyers as the consumer of its output.
 
-|**Agent**|**Primary Role**|**v4 Addition**|
+|**Agent**|**Primary Role**|**v4 Modification**|
 | :- | :- | :- |
-|Agent 1 — Intake|Converts citizen narrative to structured incident JSON via guided conversation, OCR, evidence tagging|No change|
-|Agent 2 — Research|Retrieves verified BNS/BNSS/IPC laws and state-specific variations from Qdrant + Neo4j|Also used by Legal Explorer in lawyer mode — depth and citation format adjusted|
-|Agent 3 — Strategy|Builds prioritised action plan, sets lawyer\_recommended flag when needed|Sets fee estimate range for citizen-posted case based on domain benchmarks|
-|Agent 4 — Drafting|Generates legal documents in court-ready format — Word + PDF export|Generates lawyer case summary card from CaseState for pipeline display|
-|Agent 5 — Explainability|Produces confidence scores, retrieval sources, reasoning chain export|In lawyer mode: outputs full citation text and HC/SC judgment references rather than plain-language summaries|
+|Agent 1 — Intake|Converts narrative to structured JSON via deterministic dialogue (Temp=0.0)|Strict fact extraction logic|
+|Agent 2 — Research|Retrieves verified BNS/BNSS laws from Qdrant + Neo4j with 100% reproducibility|Deterministic retrieval & citation|
+|Agent 3 — Strategy|Builds action plan & sets fee benchmarks; defines the 4-Phase Legal Journey|Logic-driven forum routing|
+|Agent 4 — Drafting|Generates Word + PDF exports; triggers Case Sync to Dashboard on successful download|Commit-on-download storage logic|
+|Agent 5 — Explainability|3-Factor Case Strength score & reasoning trace; removes low-level technical footnotes|Premium high-trust UX layer|
 
 
 # **12. Tech Stack**

@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import NextLink from 'next/link';
 import { AnalysisModal } from '../../../components/AnalysisModal';
 import { getBackendUrl } from '@/lib/utils/backendUrl'
+import axios from 'axios';
 import { toDomainLabel } from '@/lib/utils/domain';
 
 type CaseRow = Database['public']['Tables']['cases']['Row'];
@@ -103,6 +104,7 @@ export default function CaseHistory() {
   const [notifications, setNotifications] = useState<NotificationRow[]>([])
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
   const [offerCounts, setOfferCounts] = useState<Record<string, number>>({})
+  const [deletingCaseId, setDeletingCaseId] = useState<string | null>(null)
   const notificationRef = useRef<HTMLDivElement | null>(null)
 
   const offerLifecycleNotifications = (rows: NotificationRow[]) =>
@@ -448,6 +450,35 @@ export default function CaseHistory() {
     setNotifications((prev) => prev.map((row) => ({ ...row, is_read: true })))
     setUnreadNotificationCount(0)
   }
+
+  const handleDeleteCase = async (e: React.MouseEvent, caseId: string) => {
+    e.stopPropagation();
+    
+    if (!confirm("Are you sure you want to permanently delete this case and all associated documents? This cannot be undone.")) {
+      return;
+    }
+
+    setDeletingCaseId(caseId);
+    try {
+      // 1. Delete from Supabase
+      const { deleteCase } = await import('@/lib/db/cases');
+      const { error: sbError } = await deleteCase(caseId);
+      if (sbError) throw sbError;
+
+      // 2. Delete from Local SQLite & Scrub Files
+      const BACKEND_URL = getBackendUrl();
+      await axios.delete(`${BACKEND_URL}/cases/${caseId}`);
+
+      // 3. Update Local State
+      setDbCases(prev => prev.filter(c => c.id !== caseId));
+      toast.success("Case wiped out successfully.");
+    } catch (err) {
+      console.error("Failed to wipe out case:", err);
+      toast.error("Failed to completely delete the case. Some data may persist.");
+    } finally {
+      setDeletingCaseId(null);
+    }
+  };
 
   const handleNotificationClick = async (notification: NotificationRow) => {
     await markNotificationRead(notification.id)
@@ -877,6 +908,22 @@ export default function CaseHistory() {
                       {offerCounts[c.id]} {offerCounts[c.id] === 1 ? 'New Offer' : 'New Offers'}
                     </span>
                   )}
+                  
+                  {/* Delete Button */}
+                  <button
+                    onClick={(e) => handleDeleteCase(e, c.id)}
+                    disabled={deletingCaseId === c.id}
+                    className="flex items-center justify-center w-8 h-8 rounded-full border border-[#0f1e3f]/10 text-[#0f1e3f]/40 hover:bg-red-500 hover:text-white hover:border-transparent transition-all duration-300"
+                    title="Delete Case"
+                  >
+                    {deletingCaseId === c.id ? (
+                      <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    )}
+                  </button>
                 </div>
               </div>
 

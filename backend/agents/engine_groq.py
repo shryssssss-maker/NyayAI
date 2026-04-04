@@ -24,6 +24,7 @@ ACTION_PLAN_SCHEMA = """{
     {
       "step": "short action title",
       "description": "specific what-to-do with section reference where applicable",
+      "plain_description": "same step explained in simple everyday language for a common citizen — no legal jargon, use 'you' language",
       "deadline": "specific deadline e.g. Within 48 hours / Today / Day 15 after notice",
       "priority": "high"
     }
@@ -32,6 +33,7 @@ ACTION_PLAN_SCHEMA = """{
     {
       "step": "short action title",
       "description": "specific next phase action with reasoning",
+      "plain_description": "same step explained simply for a layman",
       "deadline": "specific deadline",
       "priority": "medium"
     }
@@ -49,7 +51,13 @@ ACTION_PLAN_SCHEMA = """{
   "mediation_reason": null,
   "document_types_required": ["legal_notice"],
   "demand_amount": "₹X principal + interest/compensation if applicable",
-  "relief_sought": "exactly what the complainant is asking for"
+  "relief_sought": "exactly what the complainant is asking for",
+  "plain_law_explanations": [
+    {
+      "section_ref": "exact section reference",
+      "what_it_means": "one simple sentence explaining what this law means for the citizen — no jargon"
+    }
+  ]
 }"""
 
 def _call_with_retry(prompt: str, max_attempts: int = 3) -> str:
@@ -69,7 +77,7 @@ Always output valid JSON only. Never add explanation outside the JSON."""
         try:
             response = client.chat.completions.create(
                 model=GROQ_MODEL,
-                temperature=0.2,
+                temperature=0.0,
                 response_format={"type": "json_object"},
                 messages=[
                     {"role": "system", "content": system_instruction},
@@ -195,6 +203,16 @@ State-specific Variations:
 
 11. relief_sought — what the complainant specifically wants: refund / reinstatement /
     compensation / FIR registration etc. Must match the dispute type.
+
+12. For each step in immediate and medium_term, write a `plain_description` as if explaining
+    to a person who has never dealt with courts or laws. No legal jargon. Use "you" language.
+    Example: Instead of "File consumer complaint citing Section 65" write
+    "File a complaint at the consumer forum — it's free for claims under ₹5 lakh"
+
+13. For `plain_law_explanations`, include ONE entry per cited law section. Explain each section
+    in 1 simple sentence that a common citizen can understand.
+    Example: "Consumer Protection Act Section 65" → "If a company charges you for something
+    you never received, you have the right to a full refund."
 
 Return ONLY a JSON object matching this exact schema — no other text:
 {ACTION_PLAN_SCHEMA}

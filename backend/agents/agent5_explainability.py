@@ -165,6 +165,60 @@ def explainability_agent(case_state: dict, mode: str = "citizen") -> dict:
 
     legal_standing_breakdown = " | ".join(parts) or "See action plan for reasoning."
 
+    # ── Human-Friendly Analysis Phases ────────────────────────────────────────
+    
+    # Phase 2 Description:
+    law_count = len(all_sections)
+    if law_count > 0:
+        law_desc = f"We matched your case against {law_count} relevant legal sections and past court precedents."
+    else:
+        law_desc = "We've identified your general legal issue, but we need more details to name the exact law section."
+
+    # Phase 4 Description:
+    doc_count = len(generated_keys)
+    if doc_count > 0:
+        doc_desc = f"We drafted {doc_count} customized legal documents for your case."
+    else:
+        doc_desc = "Once we have enough details and evidence, we will automatically draft your legal documents here."
+
+    analysis_phases = [
+        {
+            "title": "Understanding Your Story",
+            "description": f"We identified {len(facts.get('key_facts', []))} key facts and categorized your dispute as '{facts.get('incident_type','General Legal')}'.",
+            "icon": "🔍",
+            "status": "complete" if facts else "pending"
+        },
+        {
+            "title": "Searching the Law",
+            "description": law_desc,
+            "icon": "📚",
+            "status": "complete" if mapping else "pending"
+        },
+        {
+            "title": "Building Your Strategy",
+            "description": f"We determined the best forum ({plan.get('forum_selection','N/A')}) and mapped out your next steps.",
+            "icon": "⚖️",
+            "status": "complete" if plan else "pending"
+        },
+        {
+            "title": "Preparing Your Documents",
+            "description": doc_desc,
+            "icon": "📝",
+            "status": "complete" if generated_keys else "pending"
+        }
+    ]
+
+    # ── Scoring Factors (Basis for the 1-5 score) ─────────────────────────────
+
+    fact_count = len(facts.get("key_facts", []))
+    ev_count = len(ev)
+    
+    scoring_factors = {
+        "details": "High" if fact_count > 10 else "Medium" if fact_count > 4 else "Low",
+        "evidence": "Complete" if ev_count > 2 else "Partial" if ev_count > 0 else "None",
+        "law": "High" if standing == "strong" else "Moderate" if standing == "moderate" else "Complex"
+    }
+
     # ── Write reasoning_trace ────────────────────────────────────────────────
 
     case_state["reasoning_trace"] = {
@@ -173,6 +227,8 @@ def explainability_agent(case_state: dict, mode: str = "citizen") -> dict:
         "citations": citations,
         "overall_confidence": overall,
         "legal_standing_breakdown": legal_standing_breakdown,
+        "analysis_phases": analysis_phases,
+        "scoring_factors": scoring_factors,
     }
 
     # ── Logging ──────────────────────────────────────────────────────────────

@@ -107,6 +107,22 @@ def route_after_intake(state: GraphState):
         return "proceed_to_research"
 
 
+def route_after_strategy(state: GraphState):
+    """Skip document drafting for weak cases with insufficient facts."""
+    case_dict = state.get("case_state", {})
+    mapping = case_dict.get("legal_mapping", {})
+    standing = mapping.get("legal_standing_score", "moderate")
+    facts = case_dict.get("structured_facts", {})
+    key_facts_count = len(facts.get("key_facts", []))
+
+    if standing == "weak" and key_facts_count < 3:
+        logger.info("--- ROUTING: SKIPPING DRAFTING (weak case, insufficient facts) ---")
+        return "skip_drafting"
+    else:
+        logger.info("--- ROUTING: PROCEEDING TO DRAFTING ---")
+        return "proceed_to_drafting"
+
+
 # --- Graph Construction ---
 
 def build_nyaya_graph():
@@ -132,13 +148,24 @@ def build_nyaya_graph():
     )
 
     workflow.add_edge("agent_2_research", "agent_3_strategy")
-    workflow.add_edge("agent_3_strategy", "agent_4_drafting")
+    
+    # Conditional: skip drafting for weak cases
+    workflow.add_conditional_edges(
+        "agent_3_strategy",
+        route_after_strategy,
+        {
+            "proceed_to_drafting": "agent_4_drafting",
+            "skip_drafting": "agent_5_explainability"
+        }
+    )
+
     workflow.add_edge("agent_4_drafting", "agent_5_explainability")
     workflow.add_edge("agent_5_explainability", END)
 
     # Compile the graph
     app = workflow.compile()
     return app
+
 
 if __name__ == "__main__":
     import json

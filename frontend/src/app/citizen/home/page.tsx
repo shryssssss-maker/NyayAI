@@ -1,5 +1,5 @@
 'use client';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import NextLink from 'next/link';
 import { Sidebar } from '../../../../components/sidebar';
 import gsap from 'gsap';
@@ -14,8 +14,9 @@ import { getNotifications, markAllNotificationsRead, markNotificationRead, subsc
 import type { Database } from '@/types/supabase';
 import { ChatAnalysisCard } from '@/components/ChatAnalysisCard';
 import { getBackendUrl } from '@/lib/utils/backendUrl';
+import { canonicalizeDomain } from '@/lib/utils/domain';
 
-const BACKEND_URL = getBackendUrl();
+const BACKEND_URL = getBackendUrl()
 
 interface Message {
   id: string;
@@ -24,6 +25,7 @@ interface Message {
   timestamp: Date;
   isError?: boolean;
   type?: 'text' | 'follow_up' | 'analysis_result';
+  attachments?: string[];
   metadata?: {
     questions?: string[];
     summary?: string;
@@ -33,7 +35,54 @@ interface Message {
     generatedDocuments?: any;
     reasoningTrace?: any;
     incidentType?: string;
+    // Fields for action-triggered save
+    title?: string;
+    domain?: string;
+    rawNarrative?: string;
+    status?: string;
+    lawyerRecommended?: boolean;
+    intakeStatus?: string;
   };
+}
+
+type NotificationRow = Database['public']['Tables']['notifications']['Row']
+
+function deriveCaseTitle(rawTitle: unknown, rawSummary: unknown, rawNarrative: unknown): string {
+  if (typeof rawTitle === 'string' && rawTitle.trim()) return rawTitle.trim()
+
+  const summary = typeof rawSummary === 'string' ? rawSummary.trim() : ''
+  if (summary) {
+    const firstSentence = summary
+      .split(/[.!?]/)
+      .map((s) => s.trim())
+      .find(Boolean) ?? summary
+    return firstSentence.slice(0, 90)
+  }
+
+  const narrative = typeof rawNarrative === 'string' ? rawNarrative.trim() : ''
+  if (narrative) {
+    const firstLine = narrative
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .find(Boolean) ?? narrative
+    return firstLine.slice(0, 90)
+  }
+
+  return 'Untitled Legal Case'
+}
+
+function inferDomainFromText(rawText: unknown): string {
+  const text = typeof rawText === 'string' ? rawText.toLowerCase() : ''
+  if (!text) return ''
+
+  if (/(ancestral|inheritance|property|partition|share in property|land)/.test(text)) return 'property'
+  if (/(husband|wife|marriage|custody|domestic violence|divorce|alimony)/.test(text)) return 'family'
+  if (/(fraud|otp|cyber|online scam|hacked|phishing)/.test(text)) return 'cyber'
+  if (/(salary|termination|employer|workplace|harassment at work)/.test(text)) return 'labour'
+  if (/(rent|tenant|landlord|eviction)/.test(text)) return 'tenant'
+  if (/(consumer|defect|warranty|refund|service center|product)/.test(text)) return 'consumer'
+
+  return ''
 }
 
 export default function CitizenHome() {
@@ -49,6 +98,10 @@ export default function CitizenHome() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [caseId, setCaseId] = useState<string | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [isTranscribing, setIsTranscribing] = useState(false);
   
@@ -72,6 +125,43 @@ export default function CitizenHome() {
   const iconsRef = useRef<HTMLDivElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const filesArray = Array.from(e.target.files);
+      setSelectedFiles((prev) => [...prev, ...filesArray]);
+    }
+    // Reset input so the same file can be picked again if removed
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removeFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadFiles = async (): Promise<string[]> => {
+    if (selectedFiles.length === 0) return [];
+    
+    setIsUploading(true);
+    const formData = new FormData();
+    selectedFiles.forEach(file => {
+      formData.append('files', file);
+    });
+
+    try {
+      const response = await axios.post(`${BACKEND_URL}/upload`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      return response.data.file_paths;
+    } catch (err) {
+      console.error("Upload error:", err);
+      toast.error("Failed to upload documents. The engine will analyze your text only.");
+      return [];
+    } finally {
+      setIsUploading(false);
+      setSelectedFiles([]);
+    }
+  };
+
   const syncCaseToDashboard = async (caseIdToSync: string) => {
     try {
       await axios.post(`${BACKEND_URL}/save_case/${caseIdToSync}`);
@@ -83,27 +173,13 @@ export default function CitizenHome() {
     }
   };
 
-  const offerLifecycleNotifications = (rows: NotificationRow[]) =>
+  const onlyLawyerAcceptance = (rows: NotificationRow[]) =>
     rows.filter((row) => {
-      if (row.type === 'offer_received' || row.type === 'offer_accepted') return true;
+      if (row.type === 'offer_accepted') return true;
       const title = (row.title ?? '').toLowerCase();
       const body = (row.body ?? '').toLowerCase();
-      return title.includes('offer') || body.includes('offer') || title.includes('accepted') || body.includes('accepted');
+      return title.includes('accepted') || body.includes('accepted');
     });
-
-  const getNotificationTitle = (item: NotificationRow) => {
-    if (item.title) return item.title;
-    if (item.type === 'offer_received') return 'New lawyer offer received';
-    if (item.type === 'offer_accepted') return 'Your offer acceptance is confirmed';
-    return 'Case update';
-  };
-
-  const getNotificationBody = (item: NotificationRow) => {
-    if (item.body) return item.body;
-    if (item.type === 'offer_received') return 'A lawyer has sent a new offer. Open your cases to review it.';
-    if (item.type === 'offer_accepted') return 'Your selected lawyer has been notified.';
-    return 'Tap to open your case updates.';
-  };
 
   const formatRelativeTime = (iso: string | null) => {
     if (!iso) return 'Just now';
@@ -118,7 +194,7 @@ export default function CitizenHome() {
     return `${diffDay}d ago`;
   };
 
-  const loadOfferNotifications = useCallback(async () => {
+  const loadAcceptanceNotifications = async () => {
     const { data: authData, error: authError } = await supabase.auth.getUser();
     if (authError || !authData.user) return;
 
@@ -127,10 +203,10 @@ export default function CitizenHome() {
     setNotificationLoading(false);
     if (error) return;
 
-    const filtered = offerLifecycleNotifications(data ?? []);
+    const filtered = onlyLawyerAcceptance(data ?? []);
     setNotifications(filtered);
     setUnreadNotificationCount(filtered.filter((row) => !row.is_read).length);
-  }, []);
+  };
   useEffect(() => {
     // Scroll to bottom whenever messages change or loading state changes
     scrollToBottom();
@@ -205,7 +281,7 @@ export default function CitizenHome() {
     }, containerRef);
     
     return () => ctx.revert();
-  }, [loadOfferNotifications]);
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -228,12 +304,12 @@ export default function CitizenHome() {
     let channel: ReturnType<typeof subscribeToNotifications> | null = null;
 
     const init = async () => {
-      await loadOfferNotifications();
+      await loadAcceptanceNotifications();
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (authError || !authData.user) return;
 
       channel = subscribeToNotifications(authData.user.id, async () => {
-        await loadOfferNotifications();
+        await loadAcceptanceNotifications();
       });
     };
 
@@ -252,18 +328,27 @@ export default function CitizenHome() {
 
   const handleSend = async (customInput?: string) => {
     const textToSend = customInput || input;
-    if (!textToSend.trim() || isLoading) return;
+    const hasFiles = selectedFiles.length > 0;
+    const fileNames = selectedFiles.map(f => f.name);
+    if (!textToSend.trim() && !hasFiles || isLoading) return;
+
+    setIsLoading(true);
+    
+    let uploadedPaths: string[] = [];
+    if (hasFiles) {
+      uploadedPaths = await uploadFiles();
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: textToSend,
-      timestamp: new Date()
+      content: textToSend || (uploadedPaths.length > 0 ? "Analyzing uploaded documents..." : ""),
+      timestamp: new Date(),
+      attachments: fileNames.length > 0 ? fileNames : undefined,
     };
 
     setMessages(prev => [...prev, userMessage]);
     if (!customInput) setInput('');
-    setIsLoading(true);
 
     try {
       const { data: authData } = await supabase.auth.getUser()
@@ -287,49 +372,38 @@ export default function CitizenHome() {
         raw_narrative: textToSend,
         language_preference: "english",
         state_jurisdiction: "Maharashtra",
-        mode: "citizen"
+        mode: "citizen",
+        file_paths: uploadedPaths
       });
 
       const result = response.data;
       const newCaseId = result.case_state?.case_id;
       if (newCaseId) setCaseId(newCaseId);
 
+      // Pre-calculate data for potential download sync
+      const intakeStatus: string | undefined = result.intake_status;
+      const isComplete = intakeStatus === 'complete';
+      const lawyerRecommended = !!result.case_state?.action_plan?.lawyer_recommended;
+      const structuredFacts = result.case_state?.structured_facts ?? null;
+      const summaryText = structuredFacts?.incident_summary ?? '';
+      const titleText = deriveCaseTitle(structuredFacts?.case_title, summaryText, textToSend);
+
+      const derivedDomain = canonicalizeDomain(
+        structuredFacts?.incident_type
+          ?? inferDomainFromText(summaryText || textToSend)
+          ?? 'other'
+      );
+
+      const nextStatus =
+        lawyerRecommended && isComplete
+          ? 'seeking_lawyer'
+          : isComplete
+            ? 'analysis_complete'
+            : 'analysis_pending';
+
       if (newCaseId) {
-        const intakeStatus: string | undefined = result.intake_status
-        const isComplete = intakeStatus === 'complete'
-        const lawyerRecommended = !!result.case_state?.action_plan?.lawyer_recommended
-
-        const nextStatus =
-          lawyerRecommended && isComplete
-            ? 'seeking_lawyer'
-            : isComplete
-              ? 'analysis_complete'
-              : 'analysis_pending'
-
-        await upsertChatbotCase({
-          caseId: newCaseId,
-          citizenId: user.id,
-          domain: result.case_state?.legal_mapping?.primary_domain ?? 'other',
-          title: result.case_state?.structured_facts?.case_title ?? 'Citizen Chatbot Case',
-          incident_description: result.case_state?.raw_narrative ?? textToSend,
-          status: nextStatus,
-          is_seeking_lawyer: lawyerRecommended && isComplete,
-          confidence_score: typeof result.case_state?.legal_mapping?.legal_standing_score === 'number'
-            ? result.case_state.legal_mapping.legal_standing_score
-            : null,
-          confirmed_facts: result.case_state?.structured_facts ?? null,
-          applicable_laws: result.case_state?.legal_mapping ?? null,
-          recommended_strategy: result.case_state?.action_plan ?? null,
-          case_brief: result.case_state?.case_brief ?? null,
-          evidence_inventory: result.case_state?.evidence_inventory ?? null,
-        })
-
-        await setActiveCaseForUser(user.id, newCaseId)
-
-        // Ensure analysis is available in backend case-history storage as soon as it is complete.
-        if (isComplete) {
-          await syncCaseToDashboard(newCaseId)
-        }
+        // Save active case ID for potential session tracking, but don't persist to cases table yet.
+        await setActiveCaseForUser(user.id, newCaseId);
       }
 
       let aiMessage: Message = {
@@ -353,7 +427,15 @@ export default function CitizenHome() {
           legalMapping: result.case_state?.legal_mapping,
           generatedDocuments: result.case_state?.generated_documents,
           reasoningTrace: result.case_state?.reasoning_trace,
-          incidentType: result.case_state?.structured_facts?.incident_type
+          incidentType: result.case_state?.structured_facts?.incident_type,
+          
+          // Data needed for lazy saving on download
+          title: titleText,
+          domain: derivedDomain,
+          rawNarrative: result.case_state?.raw_narrative ?? textToSend,
+          status: nextStatus,
+          lawyerRecommended: lawyerRecommended && isComplete,
+          intakeStatus: result.intake_status
         };
       } else {
         // Fallback for greetings or simple responses from conversational sync
@@ -363,10 +445,19 @@ export default function CitizenHome() {
       setMessages(prev => [...prev, aiMessage]);
     } catch (error) {
       console.error("API Error:", error);
+      const isAxiosNetworkError = axios.isAxiosError(error) && !error.response
+      const backendMessage = axios.isAxiosError(error) && typeof error.response?.data?.detail === 'string'
+        ? error.response.data.detail
+        : null
+
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'ai',
-        content: "I'm having trouble connecting to the legal engine right now. Please check if the backend is running and try again.",
+        content: backendMessage
+          ? `Legal engine error: ${backendMessage}`
+          : isAxiosNetworkError
+            ? `Cannot reach legal engine at ${BACKEND_URL}. Please verify backend is running on this URL.`
+            : "I couldn't process your request right now. Please try again.",
         timestamp: new Date(),
         isError: true,
         type: 'text'
@@ -395,13 +486,8 @@ export default function CitizenHome() {
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-[#0f1e3f] overflow-hidden" ref={containerRef}>
-      {/* Sidebar - hidden on mobile since it's fixed there */}
-      <div className="hidden md:block shrink-0 h-screen z-50 md:sticky md:top-0 shadow-[4px_0_24px_rgba(0,0,0,0.05)] dark:shadow-none bg-white dark:bg-[#0a152e]">
-        <Sidebar />
-      </div>
-
-      {/* Mobile Sidebar - always rendered fixed, handled by GSAP inside Sidebar */}
-      <div className="md:hidden">
+      {/* Sidebar */}
+      <div className="shrink-0 h-screen z-50 md:sticky md:top-0 shadow-[4px_0_24px_rgba(0,0,0,0.05)] dark:shadow-none bg-white dark:bg-[#0a152e]">
         <Sidebar />
       </div>
 
@@ -416,7 +502,7 @@ export default function CitizenHome() {
                 const next = !notificationOpen;
                 setNotificationOpen(next);
                 if (next) {
-                  await loadOfferNotifications();
+                  await loadAcceptanceNotifications();
                 }
               }}
               className="relative flex items-center justify-center w-11 h-11 md:w-12 md:h-12 rounded-full border border-gray-300 dark:border-white/5 dark:bg-[#213a56]/20 bg-white text-gray-700 dark:text-[#cdaa80] hover:bg-gray-100 dark:hover:bg-[#213a56]/60 transition-all duration-300 hover:scale-105 active:scale-95 shadow-sm"
@@ -436,7 +522,7 @@ export default function CitizenHome() {
                 <div className="px-4 py-3 border-b border-[#e8d7c1] dark:border-[#cdaa80]/20 flex items-center justify-between">
                   <div>
                     <p className="text-[12px] uppercase tracking-[1.5px] text-[#7b5f40] dark:text-[#cdaa80] font-semibold">Notifications</p>
-                    <p className="text-[12px] text-[#6b5a49] dark:text-white/70">Offer and acceptance updates</p>
+                    <p className="text-[12px] text-[#6b5a49] dark:text-white/70">Lawyer acceptance updates</p>
                   </div>
                   <button
                     onClick={handleMarkAllRead}
@@ -450,7 +536,7 @@ export default function CitizenHome() {
                   {notificationLoading ? (
                     <div className="px-4 py-5 text-sm text-[#6b5a49] dark:text-white/70">Loading notifications...</div>
                   ) : notifications.length === 0 ? (
-                    <div className="px-4 py-5 text-sm text-[#6b5a49] dark:text-white/70">No offer notifications yet.</div>
+                    <div className="px-4 py-5 text-sm text-[#6b5a49] dark:text-white/70">No lawyer acceptance notifications yet.</div>
                   ) : (
                     notifications.map((item) => (
                       <NextLink
@@ -466,14 +552,14 @@ export default function CitizenHome() {
                       >
                         <div className="flex items-start justify-between gap-3">
                           <p className="text-[13px] font-semibold text-[#3f3124] dark:text-white/90 leading-snug">
-                            {getNotificationTitle(item)}
+                            {item.title || 'A lawyer accepted your request'}
                           </p>
                           <span className="text-[11px] text-[#7b5f40] dark:text-white/60 whitespace-nowrap">
                             {formatRelativeTime(item.created_at)}
                           </span>
                         </div>
                         <p className="mt-1 text-[12px] text-[#6b5a49] dark:text-white/75 leading-relaxed">
-                          {getNotificationBody(item)}
+                          {item.body || 'Tap to open your case updates.'}
                         </p>
                       </NextLink>
                     ))
@@ -527,6 +613,20 @@ export default function CitizenHome() {
                   {msg.content}
                 </p>
 
+                {/* Attachment indicators */}
+                {msg.attachments && msg.attachments.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {msg.attachments.map((name, i) => (
+                      <span
+                        key={`${msg.id}-attach-${i}`}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#997953]/15 dark:bg-[#cdaa80]/15 text-[11px] text-[#997953] dark:text-[#cdaa80]"
+                      >
+                        📎 {name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
                 {/* Follow-up Questions - REMOVED for SYNC Chat */}
 
                 {/* Analysis Result Card */}
@@ -537,8 +637,46 @@ export default function CitizenHome() {
                       metadata={msg.metadata}
                       backendUrl={BACKEND_URL}
                       onDownloadSync={async () => {
-                        if (caseId) {
-                          await syncCaseToDashboard(caseId);
+                        const m = msg.metadata;
+                        if (!m) return;
+                        
+                        // 1. Check if we have a user
+                        const { data: authData } = await supabase.auth.getUser();
+                        if (!authData.user) {
+                          toast.error("Please log in to save this case.");
+                          return;
+                        }
+
+                        // 2. Perform the full sync
+                        try {
+                          const { error: upsertError } = await upsertChatbotCase({
+                            caseId: caseId || msg.id, // Fallback to message ID if caseId is missing
+                            citizenId: authData.user.id,
+                            domain: (m.domain || 'other') as any,
+                            title: m.title || 'Untitled Case',
+                            incident_description: m.rawNarrative || msg.content,
+                            status: (m.status || 'analysis_complete') as any,
+                            is_seeking_lawyer: !!m.lawyerRecommended,
+                            confidence_score: typeof m.standing === 'string' ? (m.standing === 'strong' ? 80 : 50) : null,
+                            confirmed_facts: m.legalMapping?.structured_facts || null,
+                            applicable_laws: m.legalMapping || null,
+                            recommended_strategy: m.actionPlan || null,
+                            case_brief: m.reasoningTrace || null,
+                            evidence_inventory: m.actionPlan?.evidence_checklist || null,
+                          });
+
+                          if (upsertError) throw upsertError;
+
+                          // 3. Sync to local SQLite
+                          const cid = caseId || msg.id;
+                          if (cid) {
+                            await axios.post(`${BACKEND_URL}/save_case/${cid}`);
+                          }
+                          
+                          toast.success("Case successfully committed to dashboard.");
+                        } catch (err) {
+                          console.error("Failed to commit case on download:", err);
+                          toast.error("Case saved locally, but cloud sync failed.");
                         }
                       }}
                     />
@@ -565,18 +703,59 @@ export default function CitizenHome() {
         {/* Fixed Input Area at Bottom */}
         <div ref={inputBarRef} className="absolute bottom-0 left-0 right-0 p-6 md:p-10 bg-gradient-to-t from-gray-50 via-gray-50 to-transparent dark:from-[#0f1e3f] dark:via-[#0f1e3f] dark:to-transparent z-20">
           <div className="max-w-4xl mx-auto md:px-6">
+            {/* File Previews */}
+            {selectedFiles.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3 px-2">
+                {selectedFiles.map((file, idx) => (
+                  <div 
+                    key={`${file.name}-${idx}`}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-[#997953]/10 dark:bg-[#cdaa80]/10 border border-[#997953]/30 dark:border-[#cdaa80]/30 rounded-full text-[12px] text-[#997953] dark:text-[#cdaa80] animate-fadeIn"
+                  >
+                    <span className="truncate max-w-[150px]">{file.name}</span>
+                    <button 
+                      onClick={() => removeFile(idx)}
+                      className="hover:text-red-500 transition-colors"
+                      aria-label={`Remove ${file.name}`}
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="flex items-center gap-4 w-full group relative">
               
+              {/* Hidden File Input */}
+              <input
+                type="file"
+                multiple
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                className="hidden"
+                accept=".jpg,.jpeg,.png,.pdf,.doc,.docx"
+              />
+
               {/* Plus Button */}
               <button 
                 type="button"
-                disabled={isLoading}
+                disabled={isLoading || isUploading}
+                onClick={() => fileInputRef.current?.click()}
                 className="flex items-center justify-center w-12 h-12 md:w-14 md:h-14 rounded-full border border-gray-300 dark:border-white/10 dark:bg-transparent bg-white text-gray-500 dark:text-white/60 hover:bg-gray-100 dark:hover:bg-white/5 active:bg-gray-200 hover:scale-105 active:scale-95 transition-all duration-300 shrink-0 cursor-pointer shadow-sm z-10 outline-none focus:ring-2 focus:ring-[#997953]/50 dark:focus:ring-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 aria-label="Add attachment"
               >
-                <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
-                </svg>
+                {isUploading ? (
+                  <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+                  </svg>
+                )}
               </button>
               
               {/* Input Field */}
@@ -588,8 +767,8 @@ export default function CitizenHome() {
                   type="text" 
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  disabled={isLoading || isTranscribing}
-                  placeholder={isLoading ? "Generating analysis..." : isTranscribing ? "Processing voice input..." : "Describe your legal situation..."}
+                  disabled={isLoading || isTranscribing || isUploading}
+                  placeholder={isLoading ? "Generating analysis..." : isUploading ? "Uploading documents..." : isTranscribing ? "Processing voice input..." : "Describe your legal situation..."}
                   className="w-full bg-white dark:bg-transparent border border-gray-300 dark:border-[#cdaa80]/30 rounded-full pl-6 pr-16 py-4 md:py-[18px] text-[15px] outline-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-white/40 focus:border-[#997953] dark:focus:border-[#cdaa80] focus:ring-1 focus:ring-[#997953] dark:focus:ring-[#cdaa80] transition-all duration-300 shadow-[0_4px_20px_rgba(0,0,0,0.02)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)] hover:border-gray-400 dark:hover:border-[#cdaa80]/60 hover:bg-white/50 dark:hover:bg-[#213a56]/20 focus:bg-white dark:focus:bg-[#1a2c47]/50 disabled:opacity-70 disabled:cursor-wait"
                 />
                 
@@ -624,7 +803,7 @@ export default function CitizenHome() {
               <button 
                 type="button"
                 onClick={() => handleSend()}
-                disabled={isLoading || !input.trim()}
+                disabled={isLoading || isUploading || (!input.trim() && selectedFiles.length === 0)}
                 className="flex items-center justify-center w-12 h-12 md:w-14 md:h-14 rounded-full bg-[#997953] dark:bg-[#cdaa80] text-white dark:text-[#0f1e3f] hover:bg-[#7a6042] dark:hover:bg-[#e0c3a0] hover:scale-105 active:scale-95 hover:shadow-lg hover:shadow-[#cdaa80]/20 transition-all duration-300 shrink-0 cursor-pointer shadow-md z-10 outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#997953] dark:focus:ring-[#cdaa80] dark:focus:ring-offset-[#0f1e3f] disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
               >
                 <svg className="w-5 h-5 md:w-6 md:h-6 ml-1 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -671,5 +850,3 @@ export default function CitizenHome() {
     </div>
   );
 }
-
-type NotificationRow = Database['public']['Tables']['notifications']['Row'];

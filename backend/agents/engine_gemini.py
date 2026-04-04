@@ -21,7 +21,7 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel(
     model_name="gemini-2.0-flash",
     generation_config=genai.GenerationConfig(
-        temperature=0.2,
+        temperature=0.0,
         response_mime_type="application/json",
     ),
     system_instruction="""You are a senior Indian litigation expert with 20+ years experience.
