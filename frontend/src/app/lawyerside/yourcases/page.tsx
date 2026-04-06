@@ -2,10 +2,11 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import gsap from 'gsap';
-import { useRouter } from 'next/navigation';
 import { Sidebar } from '../../../../components/sidebar';
 import type { NavItem } from '../../../../components/sidebar';
 import { supabase } from '@/lib/supabase/client';
+import { subscribeWithFallback } from '@/lib/realtime/subscribeWithFallback';
+import { updateCase } from '@/lib/db/cases';
 import type { Database } from '@/types/supabase';
 import { Menu, Home, Compass, Store, Briefcase } from 'lucide-react';
 
@@ -98,7 +99,6 @@ function formatDomain(d: string): string {
 }
 
 export default function YourCasesKanban() {
-  const router = useRouter();
   const [cards, setCards]         = useState<KanbanCard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [dbError, setDbError]     = useState<string | null>(null);
@@ -148,9 +148,17 @@ export default function YourCasesKanban() {
     fetchCases();
     const ch = supabase
       .channel('kanban-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'case_pipeline' }, () => fetchCases())
-      .subscribe();
-    return () => { void supabase.removeChannel(ch); };
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'case_pipeline' }, () => fetchCases());
+
+    const cleanupRealtime = subscribeWithFallback({
+      channel: ch,
+      onRefresh: fetchCases,
+      removeChannel: (channel) => supabase.removeChannel(channel),
+      pollIntervalMs: 12000,
+      startupFallbackMs: 5000,
+    });
+
+    return () => { void cleanupRealtime(); };
   }, [fetchCases]);
 
   // ── Column data ────────────────────────────────────────
@@ -235,17 +243,28 @@ export default function YourCasesKanban() {
       console.error('Failed to update stage:', error);
       // Revert on error
       fetchCases();
+      return;
+    }
+
+    const mappedCaseStatus =
+      newStage === 'active'
+        ? 'active'
+        : newStage === 'completed'
+          ? 'completed'
+          : newStage === 'accepted'
+            ? 'lawyer_matched'
+            : null;
+
+    if (mappedCaseStatus) {
+      await updateCase(card.caseData.id, { status: mappedCaseStatus });
     }
   }
 
   // ── Render ─────────────────────────────────────────────
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-[#0f1e3f]">
-      <div className="hidden md:block md:sticky md:top-0 md:h-screen shrink-0 z-[1000]">
-        <Sidebar navItems={LAWYER_NAV_ITEMS} showProfileButton={true} onProfileClick={() => router.push('/lawyerside/profile')} />
-      </div>
-      <div className="md:hidden relative z-[1000]">
-        <Sidebar navItems={LAWYER_NAV_ITEMS} showProfileButton={true} onProfileClick={() => router.push('/lawyerside/profile')} />
+      <div className="md:sticky md:top-0 md:h-screen shrink-0 z-50">
+        <Sidebar navItems={LAWYER_NAV_ITEMS} />
       </div>
 
       <div className="flex-1 p-6 md:p-10 text-gray-900 dark:text-white font-serif overflow-x-auto">

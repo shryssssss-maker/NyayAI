@@ -83,6 +83,7 @@ class LegalMapping(BaseModel):
 class ActionStep(BaseModel):
     step: str
     description: str
+    plain_description: Optional[str] = None
     deadline: Optional[str] = None
     priority: Literal["high", "medium", "low"] = "medium"
 
@@ -103,6 +104,7 @@ class ActionPlan(BaseModel):
     document_types_required: list[str] = Field(default_factory=list)
     demand_amount: Optional[str] = None
     relief_sought: Optional[str] = None
+    plain_law_explanations: list[dict] = Field(default_factory=list)
 
 
 # ── Agent 4 sub-models ────────────────────────────────────────────────────────
@@ -136,6 +138,8 @@ class ReasoningTrace(BaseModel):
     citations: list[str] = Field(default_factory=list)
     overall_confidence: Literal["high", "medium", "low"] = "medium"
     legal_standing_breakdown: Optional[str] = None
+    analysis_phases: list[dict] = Field(default_factory=list)
+    scoring_factors: dict = Field(default_factory=dict)
 
 
 # ── Master CaseState ──────────────────────────────────────────────────────────

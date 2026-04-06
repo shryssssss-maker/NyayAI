@@ -35,7 +35,7 @@ def _call_with_retry(prompt: str, system_prompt: str, client: Groq, max_attempts
             
             response = client.chat.completions.create(
                 model=GROQ_MODEL,
-                temperature=0.2,
+                temperature=0.0,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}

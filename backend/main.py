@@ -7,6 +7,8 @@ import io
 import uuid
 import os
 import sys
+import shutil
+from pathlib import Path
 
 # Setup paths to ensure we can import from agents and schemas
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "agents")))
@@ -39,6 +41,7 @@ class IntakeRequest(BaseModel):
     language_preference: Literal["hindi", "english", "hinglish"] = "english"
     state_jurisdiction: Optional[str] = "Maharashtra"
     mode: Literal["citizen", "lawyer"] = "citizen"
+    file_paths: Optional[list[str]] = []
 
 
 class DomainTopicsRequest(BaseModel):
@@ -210,6 +213,20 @@ def save_case_to_db(case_data: dict):
     finally:
         conn.close()
 
+def delete_case_from_local_db(case_id: str):
+    """Deletes a case record from the local SQLite database."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    try:
+        c.execute("DELETE FROM cases WHERE case_id = ?", (case_id,))
+        conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f"Error deleting case from SQLite: {e}")
+        return False
+    finally:
+        conn.close()
+
 def get_all_cases():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -240,6 +257,61 @@ def get_case_by_id(case_id: str):
     
     return case_dict
 
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
+
+@app.post("/upload")
+async def upload_files(files: list[UploadFile] = File(...)):
+    saved_paths = []
+    for file in files:
+        if not file.filename:
+            continue
+        file_ext = os.path.splitext(file.filename)[1]
+        unique_name = f"{uuid.uuid4()}{file_ext}"
+        target_path = UPLOAD_DIR / unique_name
+        
+        with target_path.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        saved_paths.append(str(target_path))
+    
+    return {"file_paths": saved_paths}
+
+@app.delete("/cases/{case_id}")
+async def delete_case(case_id: str):
+    """Performs a complete wipeout of a case: Files, SQLite record, and In-memory state."""
+    logger.info(f"Complete wipeout requested for case: {case_id}")
+    
+    # 1. Retrieve case metadata to find associated files
+    case_data = get_case_by_id(case_id)
+    if case_data and case_data.get('metadata_json'):
+        try:
+            full_metadata = json.loads(case_data['metadata_json'])
+            # Check for files in 'uploaded_files' (Agent 1) or 'file_paths' (Legacy)
+            files_to_delete = full_metadata.get('uploaded_files', []) or full_metadata.get('file_paths', [])
+            
+            for f_path in files_to_delete:
+                p = Path(f_path)
+                if p.exists():
+                    p.unlink()
+                    logger.info(f"Deleted file: {f_path}")
+        except Exception as e:
+            logger.error(f"Error scrubbing files for case {case_id}: {e}")
+
+    # 2. Delete from SQLite
+    db_success = delete_case_from_local_db(case_id)
+    
+    # 3. Clear In-memory state
+    if case_id in _case_store:
+        del _case_store[case_id]
+    if case_id in _case_rounds:
+        del _case_rounds[case_id]
+    
+    if not db_success:
+        raise HTTPException(status_code=500, detail="Failed to delete case from local database.")
+        
+    return {"status": "success", "message": f"Case {case_id} and all associated data wiped out."}
+
 @app.post("/analyze")
 async def analyze_case(request: IntakeRequest):
     try:
@@ -255,9 +327,15 @@ async def analyze_case(request: IntakeRequest):
         if existing_state:
             # Append new input to previous narrative
             old_narrative = existing_state.get("raw_narrative", "")
-            new_narrative = f"{old_narrative}\n\nUser: {request.raw_narrative}"
-            existing_state["raw_narrative"] = new_narrative
+            if request.raw_narrative:
+                new_narrative = f"{old_narrative}\n\nUser: {request.raw_narrative}"
+                existing_state["raw_narrative"] = new_narrative
             
+            # Append new uploaded files if any
+            if request.file_paths:
+                existing_files = existing_state.get("uploaded_files", [])
+                existing_state["uploaded_files"] = existing_files + request.file_paths
+
             # Reset intake status and questions to allow Agent 1 to re-process with new context
             existing_state["intake_status"] = "collecting_info"
             existing_state["follow_up_questions"] = []
@@ -270,7 +348,7 @@ async def analyze_case(request: IntakeRequest):
                 "raw_narrative": request.raw_narrative,
                 "language_preference": request.language_preference,
                 "state_jurisdiction": request.state_jurisdiction,
-                "uploaded_files": []
+                "uploaded_files": request.file_paths or []
             }
 
         # 3. Determine if we should force completion
